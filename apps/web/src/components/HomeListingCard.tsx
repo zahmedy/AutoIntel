@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useState } from "react";
 
+import { trackActivity } from "@/lib/activity";
+
 type ListingPhoto = {
   id?: number;
   public_url: string;
@@ -12,6 +14,8 @@ type ListingPhoto = {
 
 type HomeListingCardProps = {
   href: string;
+  carId?: number | string;
+  source?: string;
   title: string;
   make: string;
   model: string;
@@ -53,6 +57,8 @@ function normalizeTitle(value: string): string {
 
 export default function HomeListingCard({
   href,
+  carId,
+  source = "listing_card",
   title,
   make,
   model,
@@ -85,25 +91,43 @@ export default function HomeListingCard({
     event.preventDefault();
     event.stopPropagation();
     setPhotoIndex((current) => (current - 1 + orderedPhotos.length) % orderedPhotos.length);
+    trackActivity("photo_navigation", {
+      carId,
+      source,
+      metadata: { direction: "previous", surface: "listing_card" },
+    });
   }
 
   function showNextPhoto(event: React.MouseEvent<HTMLButtonElement>) {
     event.preventDefault();
     event.stopPropagation();
     setPhotoIndex((current) => (current + 1) % orderedPhotos.length);
+    trackActivity("photo_navigation", {
+      carId,
+      source,
+      metadata: { direction: "next", surface: "listing_card" },
+    });
+  }
+
+  function trackListingClick() {
+    trackActivity("listing_click", {
+      carId,
+      source,
+      metadata: { href },
+    });
   }
 
   return (
     <article className="car-card">
       <div className="car-media">
-        <Link href={href} className="car-media-link">
+        <Link href={href} className="car-media-link" onClick={trackListingClick}>
           {activePhoto ? (
             <img className="car-thumb" src={activePhoto} alt={title} />
           ) : (
             <div className="car-thumb" aria-hidden="true" />
           )}
         </Link>
-        <Link href={href} className="car-photo-strip" aria-label={title}>
+        <Link href={href} className="car-photo-strip" aria-label={title} onClick={trackListingClick}>
           {orderedPhotos.length ? (
             orderedPhotos.map((photo, index) => (
               <span
@@ -144,7 +168,7 @@ export default function HomeListingCard({
         ) : null}
       </div>
 
-      <Link href={href} className="car-body car-card-link">
+      <Link href={href} className="car-body car-card-link" onClick={trackListingClick}>
         <div className="car-card-head">
           <p className="car-price">{priceText}</p>
           {winterLabel ? <p className="winter-score-pill">{winterLabel}</p> : null}

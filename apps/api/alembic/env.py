@@ -7,6 +7,7 @@ from sqlmodel import SQLModel, create_engine
 # import models so metadata is registered
 from app.models.user import User  # noqa
 from app.models.car import CarListing, CarMedia, SavedCar  # noqa
+from app.models.activity import ActivityEvent  # noqa
 from app.models.lead import Lead  # noqa
 from app.models.report import UserReport  # noqa
 

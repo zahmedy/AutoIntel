@@ -16,6 +16,7 @@ from app.api.v1.routes.leads import router as leads_router
 from app.api.v1.routes.comments import router as comments_router
 from app.api.v1.routes.notifications import router as notifications_router
 from app.api.v1.routes.reports import router as reports_router
+from app.api.v1.routes.activity import router as activity_router
 
 
 app = FastAPI(title="NicheRides API", version="0.1.0")
@@ -43,6 +44,7 @@ app.include_router(leads_router, prefix="/v1")
 app.include_router(comments_router, prefix="/v1")
 app.include_router(notifications_router, prefix="/v1")
 app.include_router(reports_router, prefix="/v1")
+app.include_router(activity_router, prefix="/v1")
 
 
 ui_dir = Path(__file__).resolve().parent / "ui"

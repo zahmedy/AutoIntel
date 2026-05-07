@@ -32,6 +32,7 @@ from app.services.review import build_search_doc, enqueue_auto_review
 from app.services.description import generate_listing_description
 from app.services.niche_scoring import score_listing_for_all_niches
 from app.services.pricing import generate_price_prediction
+from app.services.activity import log_activity_event
 from app.services.vin import decode_vin_with_raw
 from app.services.vision import detect_vin_from_image, normalize_vin
 
@@ -429,6 +430,7 @@ def save_car(
     if not existing:
         session.add(SavedCar(user_id=user.id or 0, car_id=car_id))
         session.commit()
+    log_activity_event(session, event_type="save", user=user, car_id=car_id, source="save_car_api")
 
     return SavedCarStatusOut(car_id=car_id, saved=True)
 
@@ -445,6 +447,7 @@ def unsave_car(
     if saved:
         session.delete(saved)
         session.commit()
+    log_activity_event(session, event_type="unsave", user=user, car_id=car_id, source="save_car_api")
 
     return SavedCarStatusOut(car_id=car_id, saved=False)
 

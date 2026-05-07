@@ -19,6 +19,7 @@ from app.api.v1.routes.auth import (
     start_google_login,
     verify_email_code,
 )
+from app.api.v1.routes.activity import create_activity_event
 from app.api.v1.routes.comments import create_comment, list_comments
 from app.api.v1.routes.me import MeUpdate, update_me
 from app.api.v1.routes.cars import archive_owner_car, my_saved_cars, restore_archived_owner_car, save_car, saved_car_status, unsave_car
@@ -36,6 +37,7 @@ from app.models.car import CarListing, CarStatus
 from app.models.notification import Notification
 from app.models.user import User, UserRole
 from app.schemas.auth import EmailCodeRequest, EmailCodeVerify
+from app.schemas.activity import ActivityEventCreate
 from app.schemas.chat import ChatMessageCreate
 from app.schemas.lead import CounterOfferCreate, OfferCreate
 from app.services.niche_scoring import BUDGET_DAILY_NICHE_ID, score_listing_for_niche
@@ -239,6 +241,7 @@ class PreDeploymentAuthTests(unittest.TestCase):
             session.add(user)
             session.commit()
             session.refresh(user)
+            user_id = user.id
 
             with self.assertRaises(HTTPException) as raised:
                 update_me(MeUpdate(contact_text_enabled=True), session=session, user=user)
@@ -291,6 +294,49 @@ class PreDeploymentSavedCarTests(unittest.TestCase):
         self.assertEqual(len(saved_cars), 1)
         self.assertEqual(saved_cars[0].listing.id, car_id)
         self.assertFalse(removed.saved)
+
+
+class PreDeploymentActivityEventTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.engine = create_engine("sqlite:///:memory:")
+        SQLModel.metadata.create_all(self.engine)
+
+    def test_activity_event_supports_anonymous_and_user_context(self) -> None:
+        with Session(self.engine) as session:
+            user = User(email="activity@example.com")
+            session.add(user)
+            session.commit()
+            session.refresh(user)
+            user_id = user.id
+
+            anonymous = create_activity_event(
+                ActivityEventCreate(
+                    event_type="search",
+                    session_id="anon-session",
+                    source="search_page",
+                    search_query="awd suv",
+                    filters={"drivetrain": "AWD"},
+                    metadata={"result_count": 3},
+                ),
+                session=session,
+                user=None,
+            )
+            logged_in = create_activity_event(
+                ActivityEventCreate(
+                    event_type="listing_view",
+                    session_id="user-session",
+                    car_id=123,
+                    source="car_detail",
+                ),
+                session=session,
+                user=user,
+            )
+
+        self.assertEqual(anonymous.event_type, "search")
+        self.assertIsNone(anonymous.user_id)
+        self.assertEqual(anonymous.session_id, "anon-session")
+        self.assertEqual(logged_in.user_id, user_id)
+        self.assertEqual(logged_in.car_id, 123)
 
 
 class PreDeploymentListingLifecycleTests(unittest.TestCase):

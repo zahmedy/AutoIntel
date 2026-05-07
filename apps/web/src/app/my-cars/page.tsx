@@ -164,7 +164,7 @@ export default function MyCarsPage() {
     rejectFailed: "Failed to reject listing.",
     restoreSuccess: (carId: number) => `Car #${carId} restored.`,
     restoreFailed: "Failed to restore listing.",
-    title: "Garage",
+    title: "Dashboard",
     subtitle: "",
     profileKicker: "NicheRides Account",
     loading: "Loading...",

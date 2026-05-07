@@ -8,6 +8,8 @@ import { getServerLocale } from "@/lib/server-locale";
 import { getServerNiche } from "@/lib/server-niche";
 import { nicheScoreLabel, type NicheScoreResult } from "@/shared/niches";
 import ChatPanel from "./ChatPanel";
+import ContactActions from "./ContactActions";
+import ListingActivityTracker from "./ListingActivityTracker";
 import ListingReportButton from "./ListingReportButton";
 import OfferForm from "./OfferForm";
 import OwnerActions from "./OwnerActions";
@@ -189,6 +191,7 @@ export default async function CarDetailPage({
 
   return (
     <main className="page shell car-detail-page">
+      <ListingActivityTracker carId={car.id} />
       <section className="panel car-detail-main">
         <div className="listing-report-top">
           <SaveCarButton carId={car.id} ownerId={car.owner_id} />
@@ -237,15 +240,12 @@ export default async function CarDetailPage({
         <section>
           <h2 className="subheading">Contact</h2>
           {sellerName ? <p className="car-meta">{sellerName}</p> : null}
-          <div className="contact-actions compact-contact-actions">
-            {data.contact.email_url && <a href={data.contact.email_url} className="btn btn-secondary">Email</a>}
-            {data.contact.sms_url && <a href={data.contact.sms_url} className="btn btn-secondary">Text</a>}
-            {data.contact.whatsapp_url && (
-              <a href={data.contact.whatsapp_url} target="_blank" rel="noreferrer" className="btn btn-secondary">
-                WhatsApp
-              </a>
-            )}
-          </div>
+          <ContactActions
+            carId={car.id}
+            emailUrl={data.contact.email_url}
+            smsUrl={data.contact.sms_url}
+            whatsappUrl={data.contact.whatsapp_url}
+          />
           {!data.contact.email_url && !data.contact.sms_url && !data.contact.whatsapp_url ? (
             <p className="helper-text spaced-top-sm">No direct contact enabled.</p>
           ) : null}

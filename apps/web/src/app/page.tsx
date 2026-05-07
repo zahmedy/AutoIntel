@@ -1,5 +1,6 @@
 import { apiGet } from "@/lib/api";
 import HomeListingCard from "@/components/HomeListingCard";
+import SearchActivityTracker from "@/components/SearchActivityTracker";
 import SellCarLink from "@/components/SellCarLink";
 import { formatListingPrice, formatMileage, formatRelativeHours, type Locale } from "@/lib/locale";
 import { getServerLocale } from "@/lib/server-locale";
@@ -112,6 +113,20 @@ export default async function HomePage({
   let listings: HomeListing[] = [];
   let fetchError = "";
   const isFiltered = hasHomeFilters(params);
+  const searchActivityFilters = {
+    niche: selectedNiche.id,
+    city: params.city,
+    price_max: params.price_max,
+    mileage_max: params.mileage_max,
+    fuel_type: params.fuel_type,
+    drivetrain: params.drivetrain,
+    body_type: params.body_type,
+    sort: params.sort,
+    lat: params.lat,
+    lon: params.lon,
+    radius_mi: params.radius_mi,
+    radius_km: params.radius_km,
+  };
 
   try {
     const data = await apiGet<HomeSearchResponse>(buildHomeSearchPath(params));
@@ -122,6 +137,13 @@ export default async function HomePage({
 
   return (
     <main className="page shell">
+      <SearchActivityTracker
+        source="home_listings"
+        searchQuery={params.q}
+        filters={searchActivityFilters}
+        resultIds={listings.map((item) => item.id)}
+        resultCount={listings.length}
+      />
       <section className="home-hero">
         <div className="home-hero-copy">
           <h1 className="home-hero-title">
@@ -154,6 +176,8 @@ export default async function HomePage({
               <HomeListingCard
                 key={car.id}
                 href={`/cars/${car.id}?niche=${selectedNiche.id}`}
+                carId={car.id}
+                source="home_listings"
                 title={car.title || `${car.make} ${car.model}`}
                 make={car.make}
                 model={car.model}

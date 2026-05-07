@@ -5,6 +5,7 @@ import CityField from "@/components/CityField";
 import HomeListingCard from "@/components/HomeListingCard";
 import MakeModelField from "@/components/MakeModelField";
 import NearbySearch from "@/components/NearbySearch";
+import SearchActivityTracker from "@/components/SearchActivityTracker";
 import {
   formatListingPrice,
   formatMileage,
@@ -210,9 +211,32 @@ export default async function SearchPage({
   const filterCount = activeFilterCount(params);
   const formKey = filterFormKey(params);
   const clearHref = clearFiltersHref(selectedNiche.id);
+  const searchActivityFilters = {
+    niche: selectedNiche.id,
+    city: params.city,
+    make: params.make,
+    model: params.model,
+    price_max: params.price_max,
+    mileage_max: params.mileage_max,
+    fuel_type: params.fuel_type,
+    drivetrain: params.drivetrain,
+    body_type: params.body_type,
+    sort: params.sort,
+    lat: params.lat,
+    lon: params.lon,
+    radius_mi: params.radius_mi,
+    radius_km: params.radius_km,
+  };
 
   return (
     <main className="page shell">
+      <SearchActivityTracker
+        source="search_page"
+        searchQuery={params.q}
+        filters={searchActivityFilters}
+        resultIds={data.items.map((item) => item.id)}
+        resultCount={data.total}
+      />
       <section className="hero hero-mini search-hero">
         <p className="hero-kicker">Browse cars</p>
       </section>
@@ -338,6 +362,8 @@ export default async function SearchPage({
                   <HomeListingCard
                     key={car.id}
                     href={`/cars/${car.id}?niche=${selectedNiche.id}`}
+                    carId={car.id}
+                    source="search_page"
                     title={car.title || `${car.make} ${car.model}`}
                     make={car.make}
                     model={car.model}
