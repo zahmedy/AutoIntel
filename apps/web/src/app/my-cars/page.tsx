@@ -46,6 +46,11 @@ type MyCar = {
   status_before_archive?: string | null;
 };
 
+type SavedCarResponse = {
+  saved_at: string;
+  listing: MyCar;
+};
+
 type MeResponse = {
   id: number;
   name: string | null;
@@ -118,6 +123,7 @@ export default function MyCarsPage() {
   const locale = useLocale();
   const [cars, setCars] = useState<MyCar[]>([]);
   const [loading, setLoading] = useState(true);
+  const [savedCarsLoading, setSavedCarsLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [needsLogin, setNeedsLogin] = useState(false);
@@ -133,6 +139,8 @@ export default function MyCarsPage() {
   const [savingUserId, setSavingUserId] = useState(false);
   const [savingContactPrefs, setSavingContactPrefs] = useState(false);
   const [photoIndexes, setPhotoIndexes] = useState<Record<number, number>>({});
+  const [savedCars, setSavedCars] = useState<SavedCarResponse[]>([]);
+  const [savedActionId, setSavedActionId] = useState<number | null>(null);
   const [showSoldCars, setShowSoldCars] = useState(true);
   const [showArchivedCars, setShowArchivedCars] = useState(false);
   const text = {
@@ -156,9 +164,9 @@ export default function MyCarsPage() {
     rejectFailed: "Failed to reject listing.",
     restoreSuccess: (carId: number) => `Car #${carId} restored.`,
     restoreFailed: "Failed to restore listing.",
-    title: "Seller Hub",
+    title: "Garage",
     subtitle: "",
-    profileKicker: "NicheRides Seller",
+    profileKicker: "NicheRides Account",
     loading: "Loading...",
     refresh: "Refresh",
     userIdTitle: "User ID",
@@ -171,8 +179,19 @@ export default function MyCarsPage() {
     enableWhatsApp: "Enable WhatsApp",
     saveMessaging: "Save Messaging",
     logout: "Logout",
-    listingsSection: "Your Cars",
-    listingsSectionHelp: "Draft, publish, edit, or archive.",
+    listingsSection: "Your Listings",
+    listingsSectionHelp: "Drafts, review, active cars, sold, and archived.",
+    savedCarsSection: "Saved Cars",
+    savedCarsHelp: "Cars you want to revisit.",
+    noSavedCars: "No saved cars yet.",
+    savedOn: (value: string) => `Saved ${value}`,
+    removeSaved: "Remove",
+    removingSaved: "Removing...",
+    browseCars: "Browse cars",
+    sellACar: "Sell a car",
+    activeListings: "Active",
+    draftListings: "Drafts",
+    savedListings: "Saved",
     adminBadge: "Admin",
     account: "Account",
     publicUserId: "Public User ID",
@@ -225,6 +244,11 @@ export default function MyCarsPage() {
       }),
     [cars, showArchivedCars, showSoldCars],
   );
+  const profileCounts = useMemo(() => ({
+    active: cars.filter((car) => car.status === "active").length,
+    drafts: cars.filter((car) => car.status === "draft" || car.status === "rejected" || car.status === "pending_review").length,
+    saved: savedCars.length,
+  }), [cars, savedCars.length]);
   const contactSummary = contactTextEnabled || contactWhatsappEnabled
     ? [contactTextEnabled ? "Text" : "", contactWhatsappEnabled ? "WhatsApp" : ""].filter(Boolean).join(" + ")
     : "Off";
@@ -295,9 +319,21 @@ export default function MyCarsPage() {
 
       const data = (await res.json()) as MyCar[];
       setCars(data);
+
+      setSavedCarsLoading(true);
+      const savedRes = await fetch(`${API_BASE}/v1/me/saved-cars`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        cache: "no-store",
+      });
+      if (savedRes.ok) {
+        setSavedCars((await savedRes.json()) as SavedCarResponse[]);
+      }
     } catch (err) {
       setError(err instanceof Error ? translateApiMessage(locale, err.message) : text.loadListingsFailed);
     } finally {
+      setSavedCarsLoading(false);
       setLoading(false);
     }
   }, [canLoad, text.loadListingsFailed, text.missingApiBase, text.sessionExpired]);
@@ -632,6 +668,46 @@ export default function MyCarsPage() {
     }
   }
 
+  async function removeSavedCar(carId: number) {
+    setError("");
+    setSuccess("");
+
+    if (!canLoad || !API_BASE) {
+      setError(text.missingApiBase);
+      return;
+    }
+
+    const token = localStorage.getItem(TOKEN_KEY);
+    if (!token) {
+      setNeedsLogin(true);
+      setError(text.loginRequired);
+      return;
+    }
+
+    setSavedActionId(carId);
+    try {
+      const res = await fetch(`${API_BASE}/v1/cars/${carId}/save`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      if (res.status === 401 || res.status === 403) {
+        setNeedsLogin(true);
+        throw new Error(text.sessionExpired);
+      }
+      if (!res.ok) {
+        throw new Error(await parseApiError(res));
+      }
+      setSavedCars((prev) => prev.filter((saved) => saved.listing.id !== carId));
+      window.dispatchEvent(new Event("nicherides-saved-cars-changed"));
+    } catch (err) {
+      setError(err instanceof Error ? translateApiMessage(locale, err.message) : "Failed to remove saved car.");
+    } finally {
+      setSavedActionId(null);
+    }
+  }
+
   function showListingPhoto(carId: number, photoCount: number, direction: -1 | 1) {
     setPhotoIndexes((prev) => {
       const current = prev[carId] ?? 0;
@@ -649,6 +725,10 @@ export default function MyCarsPage() {
           <p className="hero-kicker">{text.profileKicker}</p>
           <h1>{text.title}</h1>
           {text.subtitle ? <p>{text.subtitle}</p> : null}
+          <div className="hero-actions">
+            <Link href="/my-cars/new" className="btn btn-primary">{text.sellACar}</Link>
+            <Link href="/search" className="btn btn-secondary">{text.browseCars}</Link>
+          </div>
         </div>
       </section>
 
@@ -753,6 +833,20 @@ export default function MyCarsPage() {
               <span>{contactWhatsappEnabled ? text.enableWhatsApp : "WhatsApp off"}</span>
               {isAdmin ? <span>{text.adminBadge}</span> : null}
             </div>
+            <div className="profile-mini-stats" aria-label="Account summary">
+              <div>
+                <strong>{profileCounts.active}</strong>
+                <span>{text.activeListings}</span>
+              </div>
+              <div>
+                <strong>{profileCounts.drafts}</strong>
+                <span>{text.draftListings}</span>
+              </div>
+              <div>
+                <strong>{profileCounts.saved}</strong>
+                <span>{text.savedListings}</span>
+              </div>
+            </div>
             <button type="button" className="btn btn-secondary profile-logout-button" onClick={handleLogout}>
               {text.logout}
             </button>
@@ -773,6 +867,7 @@ export default function MyCarsPage() {
         <div className="panel profile-empty">
           <h2 className="subheading">{text.listingsSection}</h2>
           <p className="helper-text">{text.noListingsYet}</p>
+          <Link href="/my-cars/new" className="btn btn-primary">{text.sellACar}</Link>
         </div>
       )}
 
@@ -953,6 +1048,78 @@ export default function MyCarsPage() {
           )}
         </section>
       )}
+
+      {!loading && !needsLogin ? (
+        <section className="spaced-top profile-saved-section">
+          <div className="profile-section-head">
+            <div>
+              <h2 className="subheading">{text.savedCarsSection}</h2>
+              <p className="helper-text">{text.savedCarsHelp}</p>
+            </div>
+            <Link href="/search" className="btn btn-secondary">{text.browseCars}</Link>
+          </div>
+
+          {savedCarsLoading ? (
+            <div className="panel profile-empty">
+              <p className="helper-text">{text.loading}</p>
+            </div>
+          ) : savedCars.length === 0 ? (
+            <div className="panel profile-empty profile-empty-compact">
+              <p className="helper-text">{text.noSavedCars}</p>
+            </div>
+          ) : (
+            <div className="profile-listing-grid profile-saved-grid">
+              {savedCars.map((saved) => {
+                const car = saved.listing;
+                const photos = getOrderedPhotos(car.photos);
+                const activePhoto = photos[0]?.public_url || "";
+
+                return (
+                  <article key={car.id} className="car-card profile-listing-card profile-saved-card">
+                    <Link href={`/cars/${car.id}`} className="profile-saved-media-link">
+                      <div className="car-media profile-listing-media">
+                        {activePhoto ? (
+                          <img className="car-thumb profile-listing-thumb" src={activePhoto} alt={car.title || `${car.make} ${car.model}`} />
+                        ) : (
+                          <div className="car-thumb profile-listing-thumb" aria-hidden="true" />
+                        )}
+                      </div>
+                    </Link>
+
+                    <div className="car-body profile-listing-body">
+                      <div className="car-row">
+                        <h3 className="car-title">{car.title || `${car.make} ${car.model}`}</h3>
+                        <span className="status-pill status-active">Saved</span>
+                      </div>
+                      <p className="car-meta">{car.make} {car.model} • {car.year}</p>
+                      <div className="profile-listing-facts">
+                        <p className="car-meta">{car.city || text.cityNotSet}{car.district ? `, ${car.district}` : ""}</p>
+                        <p className="car-meta">{formatMileage(car.mileage, locale)}</p>
+                        <p className="car-meta">{text.savedOn(formatShortDate(saved.saved_at, locale))}</p>
+                      </div>
+                      <p className="car-price">{formatListingPrice(car.price, locale)}</p>
+
+                      <div className="profile-card-actions">
+                        <Link href={`/cars/${car.id}`} className="btn btn-secondary">
+                          {text.openPublicListing}
+                        </Link>
+                        <button
+                          type="button"
+                          className="btn btn-secondary"
+                          disabled={savedActionId === car.id}
+                          onClick={() => void removeSavedCar(car.id)}
+                        >
+                          {savedActionId === car.id ? text.removingSaved : text.removeSaved}
+                        </button>
+                      </div>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          )}
+        </section>
+      ) : null}
     </main>
   );
 }

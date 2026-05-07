@@ -21,7 +21,7 @@ from app.api.v1.routes.auth import (
 )
 from app.api.v1.routes.comments import create_comment, list_comments
 from app.api.v1.routes.me import MeUpdate, update_me
-from app.api.v1.routes.cars import archive_owner_car, restore_archived_owner_car
+from app.api.v1.routes.cars import archive_owner_car, my_saved_cars, restore_archived_owner_car, save_car, saved_car_status, unsave_car
 from app.api.v1.routes.leads import (
     accept_offer,
     counter_offer,
@@ -257,6 +257,40 @@ class PreDeploymentAuthTests(unittest.TestCase):
         self.assertEqual(result["phone_e164"], "+15555550123")
         self.assertTrue(result["contact_text_enabled"])
         self.assertTrue(result["contact_whatsapp_enabled"])
+
+
+class PreDeploymentSavedCarTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.engine = create_engine("sqlite:///:memory:")
+        SQLModel.metadata.create_all(self.engine)
+
+    def test_user_can_save_list_and_unsave_active_car(self) -> None:
+        with Session(self.engine) as session:
+            seller = User(email="seller@example.com")
+            buyer = User(email="buyer@example.com")
+            session.add(seller)
+            session.add(buyer)
+            session.commit()
+            session.refresh(seller)
+            session.refresh(buyer)
+
+            car = make_listing(owner_id=seller.id or 0)
+            session.add(car)
+            session.commit()
+            session.refresh(car)
+            car_id = car.id or 0
+
+            saved = save_car(car_id, session=session, user=buyer)
+            status = saved_car_status(car_id, session=session, user=buyer)
+            saved_cars = my_saved_cars(session=session, user=buyer)
+            removed = unsave_car(car_id, session=session, user=buyer)
+
+        self.assertEqual(saved.car_id, car_id)
+        self.assertTrue(saved.saved)
+        self.assertTrue(status.saved)
+        self.assertEqual(len(saved_cars), 1)
+        self.assertEqual(saved_cars[0].listing.id, car_id)
+        self.assertFalse(removed.saved)
 
 
 class PreDeploymentListingLifecycleTests(unittest.TestCase):

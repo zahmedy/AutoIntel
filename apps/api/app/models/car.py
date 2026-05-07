@@ -2,6 +2,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional
 
+from sqlalchemy import UniqueConstraint
 from sqlmodel import SQLModel, Field
 
 
@@ -22,6 +23,15 @@ class CarMedia(SQLModel, table=True):
     sort_order: int = Field(default=0, index=True)
     is_cover: bool = Field(default=False, index=True)
 
+    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+
+
+class SavedCar(SQLModel, table=True):
+    __table_args__ = (UniqueConstraint("user_id", "car_id", name="uq_savedcar_user_car"),)
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(index=True, foreign_key="user.id")
+    car_id: int = Field(index=True, foreign_key="carlisting.id")
     created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
 
 class CarListing(SQLModel, table=True):

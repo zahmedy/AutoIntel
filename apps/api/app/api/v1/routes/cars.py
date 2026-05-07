@@ -10,7 +10,7 @@ from app.core.deps import get_current_user
 from app.core.config import settings
 from app.db.session import get_session
 from app.models.user import User
-from app.models.car import CarListing, CarStatus, CarMedia
+from app.models.car import CarListing, CarStatus, CarMedia, SavedCar
 from app.schemas.car import (
     CarCreate,
     CarUpdate,
@@ -21,6 +21,8 @@ from app.schemas.car import (
     MarkSoldRequest,
     PricePredictionRequest,
     PricePredictionResponse,
+    SavedCarOut,
+    SavedCarStatusOut,
     VinDecodeRequest,
     VinScanRequest,
     VinScanResponse,
@@ -365,6 +367,86 @@ def my_cars(
     car_ids = [car.id for car in cars]
     photos_map = _load_photos_map(session, car_ids)
     return [to_car_out(car, photos=photos_map.get(car.id, [])) for car in cars]
+
+
+@router.get("/me/saved-cars", response_model=list[SavedCarOut])
+def my_saved_cars(
+    session: Session = Depends(get_session),
+    user: User = Depends(get_current_user),
+):
+    saved_rows = session.exec(
+        select(SavedCar)
+        .where(SavedCar.user_id == user.id)
+        .order_by(SavedCar.created_at.desc())
+    ).all()
+    car_ids = [row.car_id for row in saved_rows]
+    if not car_ids:
+        return []
+
+    cars = session.exec(
+        select(CarListing).where(CarListing.id.in_(car_ids), CarListing.status == CarStatus.active)
+    ).all()
+    cars_by_id = {car.id: car for car in cars if car.id is not None}
+    photos_map = _load_photos_map(session, [car.id for car in cars if car.id is not None])
+
+    return [
+        SavedCarOut(
+            saved_at=row.created_at,
+            listing=to_car_out(car, photos=photos_map.get(row.car_id, [])),
+        )
+        for row in saved_rows
+        if (car := cars_by_id.get(row.car_id)) is not None
+    ]
+
+
+@router.get("/cars/{car_id}/save", response_model=SavedCarStatusOut)
+def saved_car_status(
+    car_id: int,
+    session: Session = Depends(get_session),
+    user: User = Depends(get_current_user),
+):
+    saved = session.exec(
+        select(SavedCar).where(SavedCar.user_id == user.id, SavedCar.car_id == car_id)
+    ).first()
+    return SavedCarStatusOut(car_id=car_id, saved=bool(saved))
+
+
+@router.post("/cars/{car_id}/save", response_model=SavedCarStatusOut)
+def save_car(
+    car_id: int,
+    session: Session = Depends(get_session),
+    user: User = Depends(get_current_user),
+):
+    car = session.exec(select(CarListing).where(CarListing.id == car_id)).first()
+    if not car or car.status != CarStatus.active:
+        raise HTTPException(status_code=404, detail="Not found")
+    if car.owner_id == user.id:
+        raise HTTPException(status_code=400, detail="You cannot save your own listing")
+
+    existing = session.exec(
+        select(SavedCar).where(SavedCar.user_id == user.id, SavedCar.car_id == car_id)
+    ).first()
+    if not existing:
+        session.add(SavedCar(user_id=user.id or 0, car_id=car_id))
+        session.commit()
+
+    return SavedCarStatusOut(car_id=car_id, saved=True)
+
+
+@router.delete("/cars/{car_id}/save", response_model=SavedCarStatusOut)
+def unsave_car(
+    car_id: int,
+    session: Session = Depends(get_session),
+    user: User = Depends(get_current_user),
+):
+    saved = session.exec(
+        select(SavedCar).where(SavedCar.user_id == user.id, SavedCar.car_id == car_id)
+    ).first()
+    if saved:
+        session.delete(saved)
+        session.commit()
+
+    return SavedCarStatusOut(car_id=car_id, saved=False)
 
 
 @router.post("/cars/{car_id}/submit", response_model=CarOut)

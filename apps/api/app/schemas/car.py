@@ -137,6 +137,11 @@ class PricePredictionResponse(BaseModel):
     price: int
 
 
+class SavedCarStatusOut(BaseModel):
+    car_id: int
+    saved: bool
+
+
 class NicheScoreOut(BaseModel):
     score: int
     confidence: str
@@ -216,3 +221,8 @@ class PublicCarDetailOut(BaseModel):
     listing: CarOut
     seller: PublicSellerOut
     contact: PublicContactOut
+
+
+class SavedCarOut(BaseModel):
+    saved_at: datetime
+    listing: CarOut
