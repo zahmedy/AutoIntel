@@ -1,5 +1,8 @@
-from datetime import datetime
+from datetime import datetime, timedelta
+import hashlib
+import hmac
 import json
+import secrets
 from urllib.parse import parse_qsl, urlencode, urlparse, urlsplit, urlunsplit
 import urllib.error
 import urllib.request
@@ -12,8 +15,10 @@ from sqlmodel import Session, select
 from app.schemas.auth import EmailCodeRequest, EmailCodeVerify, OTPRequest, OTPRequestResponse, OTPVerify, TokenResponse
 from app.core.config import settings
 from app.db.session import get_session
+from app.models.auth import EmailVerificationCode
 from app.models.user import User, UserRole
 from app.core.security import ALGORITHM, create_access_token
+from app.services.email_delivery import send_email_code
 from app.services.review import reindex_owner_active_listings
 from app.services.user_identity import ensure_user_id
 
@@ -24,6 +29,7 @@ GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
 GOOGLE_USERINFO_URL = "https://openidconnect.googleapis.com/v1/userinfo"
 GOOGLE_SCOPE = "openid email profile"
 LOCAL_OAUTH_HOSTS = {"localhost", "127.0.0.1", "0.0.0.0"}
+EMAIL_LOGIN_PURPOSE = "email_login"
 
 
 def fallback_name(phone_e164: str) -> str:
@@ -42,6 +48,19 @@ def normalize_email(email: str) -> str:
     if not normalized or "@" not in normalized or normalized.startswith("@") or normalized.endswith("@"):
         raise HTTPException(status_code=400, detail="Enter a valid email address")
     return normalized
+
+
+def _generate_email_code() -> str:
+    return f"{secrets.randbelow(1_000_000):06d}"
+
+
+def _hash_email_code(email: str, code: str, purpose: str = EMAIL_LOGIN_PURPOSE) -> str:
+    message = f"{purpose}:{email}:{code}".encode("utf-8")
+    return hmac.new(settings.JWT_SECRET.encode("utf-8"), message, hashlib.sha256).hexdigest()
+
+
+def _dev_code_response_value(code: str) -> str | None:
+    return code if settings.ENV.lower() != "prod" and not settings.EMAIL_FROM else None
 
 
 def _issue_token_for_email(session: Session, email: str, name: str | None = None) -> TokenResponse:
@@ -243,18 +262,100 @@ def require_us_phone(phone_e164: str) -> str:
 
 @router.post("/request-email-code", response_model=OTPRequestResponse)
 def request_email_code(payload: EmailCodeRequest, session: Session = Depends(get_session)):
-    # MVP: no-op. In prod: send a magic link or email verification code.
+    now = datetime.utcnow()
     email = normalize_email(payload.email)
     user = session.exec(select(User).where(User.email == email)).first()
-    return {"ok": True, "needs_name": not user or not user.name}
+    recent_codes = session.exec(
+        select(EmailVerificationCode)
+        .where(
+            EmailVerificationCode.email == email,
+            EmailVerificationCode.purpose == EMAIL_LOGIN_PURPOSE,
+            EmailVerificationCode.created_at >= now - timedelta(hours=1),
+        )
+        .order_by(EmailVerificationCode.created_at.desc())
+    ).all()
+
+    if recent_codes:
+        seconds_since_last = (now - recent_codes[0].created_at).total_seconds()
+        if seconds_since_last < settings.EMAIL_CODE_MIN_SECONDS_BETWEEN_REQUESTS:
+            raise HTTPException(status_code=429, detail="Please wait before requesting another code")
+
+    if len(recent_codes) >= settings.EMAIL_CODE_MAX_REQUESTS_PER_HOUR:
+        raise HTTPException(status_code=429, detail="Too many login code requests. Try again later")
+
+    for active_code in session.exec(
+        select(EmailVerificationCode).where(
+            EmailVerificationCode.email == email,
+            EmailVerificationCode.purpose == EMAIL_LOGIN_PURPOSE,
+            EmailVerificationCode.consumed_at == None,
+        )
+    ).all():
+        active_code.consumed_at = now
+        session.add(active_code)
+
+    code = _generate_email_code()
+    verification = EmailVerificationCode(
+        email=email,
+        purpose=EMAIL_LOGIN_PURPOSE,
+        code_hash=_hash_email_code(email, code),
+        expires_at=now + timedelta(minutes=settings.EMAIL_CODE_TTL_MINUTES),
+    )
+    session.add(verification)
+    session.commit()
+
+    try:
+        send_email_code(email, code)
+    except Exception as exc:
+        verification.consumed_at = datetime.utcnow()
+        session.add(verification)
+        session.commit()
+        raise HTTPException(status_code=502, detail="Failed to send verification email") from exc
+
+    return {"ok": True, "needs_name": not user or not user.name, "dev_code": _dev_code_response_value(code)}
 
 
 @router.post("/verify-email-code", response_model=TokenResponse)
 def verify_email_code(payload: EmailCodeVerify, session: Session = Depends(get_session)):
-    if payload.code != "0000":
-        raise HTTPException(status_code=400, detail="Invalid code (MVP accepts 0000)")
+    now = datetime.utcnow()
+    email = normalize_email(payload.email)
+    code = payload.code.strip()
+    if not code.isdigit() or len(code) != 6:
+        raise HTTPException(status_code=400, detail="Enter the 6-digit verification code")
 
-    return _issue_token_for_email(session, payload.email, payload.name)
+    verification = session.exec(
+        select(EmailVerificationCode)
+        .where(
+            EmailVerificationCode.email == email,
+            EmailVerificationCode.purpose == EMAIL_LOGIN_PURPOSE,
+            EmailVerificationCode.consumed_at == None,
+        )
+        .order_by(EmailVerificationCode.created_at.desc())
+    ).first()
+
+    if not verification:
+        raise HTTPException(status_code=400, detail="Request a new verification code")
+    if verification.expires_at <= now:
+        verification.consumed_at = now
+        session.add(verification)
+        session.commit()
+        raise HTTPException(status_code=400, detail="Verification code expired")
+    if verification.attempts >= settings.EMAIL_CODE_MAX_ATTEMPTS:
+        verification.consumed_at = now
+        session.add(verification)
+        session.commit()
+        raise HTTPException(status_code=429, detail="Too many verification attempts. Request a new code")
+
+    verification.attempts += 1
+    if not hmac.compare_digest(verification.code_hash, _hash_email_code(email, code)):
+        session.add(verification)
+        session.commit()
+        raise HTTPException(status_code=400, detail="Invalid verification code")
+
+    verification.consumed_at = now
+    session.add(verification)
+    session.commit()
+
+    return _issue_token_for_email(session, email, payload.name)
 
 
 @router.get("/google/start")

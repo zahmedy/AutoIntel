@@ -15,6 +15,7 @@ type VerifyResponse = {
 type CodeRequestResponse = {
   ok: boolean;
   needs_name: boolean;
+  dev_code?: string | null;
 };
 
 function normalizeEmail(rawEmail: string): string | null {
@@ -28,7 +29,7 @@ function normalizeEmail(rawEmail: string): string | null {
 export default function LoginPage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [code, setCode] = useState("0000");
+  const [code, setCode] = useState("");
   const [step, setStep] = useState<"request" | "verify">("request");
   const [needsName, setNeedsName] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -37,18 +38,18 @@ export default function LoginPage() {
   const normalizedEmail = normalizeEmail(email);
   const text = {
     title: "Sign in to NicheRides",
-    note: "Use email to manage listings, save drafts, and contact sellers. MVP code is",
+    note: "Use email to manage listings, save cars, make offers, and contact sellers.",
     missingApiBase: "NEXT_PUBLIC_API_BASE is missing.",
     invalidEmail: "Enter a valid email address.",
     requestCodeFailed: "Failed to request login code.",
-    codeRequested: "Login code requested. For MVP, use code 0000.",
+    codeRequested: "Check your email for the 6-digit code.",
     enterName: "Enter your name.",
     enterCode: "Enter verification code.",
     verifyCodeFailed: "Failed to verify code.",
     emailLabel: "Email",
     nameLabel: "Name",
     yourName: "Your name",
-    codeLabel: "Login code",
+    codeLabel: "Verification code",
     requesting: "Requesting...",
     requestCode: "Continue with Email",
     verifying: "Verifying...",
@@ -118,7 +119,8 @@ export default function LoginPage() {
       const data = (await res.json()) as CodeRequestResponse;
       setNeedsName(Boolean(data.needs_name));
       setStep("verify");
-      setSuccess(text.codeRequested);
+      setCode(data.dev_code || "");
+      setSuccess(data.dev_code ? `Dev code: ${data.dev_code}` : text.codeRequested);
     } catch (err) {
       setError(err instanceof Error ? translateApiMessage("en", err.message) : text.requestCodeFailed);
     } finally {
@@ -186,7 +188,7 @@ export default function LoginPage() {
       <section className="auth-card">
         <p className="hero-kicker">Secure account access</p>
         <h1>{text.title}</h1>
-        <p className="auth-note">{text.note} <strong>0000</strong>.</p>
+        <p className="auth-note">{text.note}</p>
 
         <div className="auth-provider-stack">
           <button type="button" className="btn btn-secondary auth-google-btn" onClick={startGoogleLogin}>
@@ -236,7 +238,9 @@ export default function LoginPage() {
                 id="login-code"
                 className="input"
                 inputMode="numeric"
-                placeholder="0000"
+                autoComplete="one-time-code"
+                placeholder="123456"
+                maxLength={6}
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
               />
@@ -260,7 +264,7 @@ export default function LoginPage() {
                   onClick={() => {
                     setStep("request");
                     setNeedsName(false);
-                    setCode("0000");
+                    setCode("");
                     setSuccess("");
                     setError("");
                   }}

@@ -114,18 +114,38 @@ class PreDeploymentAuthTests(unittest.TestCase):
 
     def test_email_code_login_creates_user_without_phone(self) -> None:
         with Session(self.engine) as session:
-            request_result = request_email_code(EmailCodeRequest(email="Driver@Example.com"), session=session)
-            token_result = verify_email_code(
-                EmailCodeVerify(email="Driver@Example.com", code="0000", name="Driver"),
-                session=session,
-            )
+            with (
+                patch("app.api.v1.routes.auth._generate_email_code", return_value="123456"),
+                patch("app.api.v1.routes.auth.send_email_code"),
+            ):
+                request_result = request_email_code(EmailCodeRequest(email="Driver@Example.com"), session=session)
+                token_result = verify_email_code(
+                    EmailCodeVerify(email="Driver@Example.com", code="123456", name="Driver"),
+                    session=session,
+                )
             user = session.exec(select(User).where(User.email == "driver@example.com")).first()
 
         self.assertTrue(request_result["needs_name"])
+        self.assertEqual(request_result["dev_code"], "123456")
         self.assertTrue(token_result.access_token)
         self.assertIsNotNone(user)
         self.assertEqual(user.phone_e164, None)
         self.assertEqual(user.name, "Driver")
+
+    def test_email_code_rejects_invalid_code(self) -> None:
+        with Session(self.engine) as session:
+            with (
+                patch("app.api.v1.routes.auth._generate_email_code", return_value="123456"),
+                patch("app.api.v1.routes.auth.send_email_code"),
+            ):
+                request_email_code(EmailCodeRequest(email="Driver@Example.com"), session=session)
+            with self.assertRaises(HTTPException) as raised:
+                verify_email_code(
+                    EmailCodeVerify(email="Driver@Example.com", code="654321", name="Driver"),
+                    session=session,
+                )
+
+        self.assertEqual(raised.exception.status_code, 400)
 
     def test_google_callback_creates_email_user_and_redirects_with_token(self) -> None:
         request = SimpleNamespace(

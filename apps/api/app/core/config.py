@@ -33,6 +33,16 @@ class Settings(BaseSettings):
     GOOGLE_LOGIN_SUCCESS_URL: str | None = None
     GOOGLE_ALLOWED_SUCCESS_URLS: str = ""
 
+    EMAIL_FROM: str | None = None
+    EMAIL_CODE_TTL_MINUTES: int = 10
+    EMAIL_CODE_MIN_SECONDS_BETWEEN_REQUESTS: int = 60
+    EMAIL_CODE_MAX_REQUESTS_PER_HOUR: int = 5
+    EMAIL_CODE_MAX_ATTEMPTS: int = 5
+    AWS_SES_REGION: str = "us-east-1"
+    AWS_SES_ACCESS_KEY_ID: str | None = None
+    AWS_SES_SECRET_ACCESS_KEY: str | None = None
+    AWS_SES_SESSION_TOKEN: str | None = None
+
     OPENSEARCH_URL: str = "http://localhost:9200"
     OPENSEARCH_INDEX: str = "autointel_cars"
 

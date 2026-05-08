@@ -10,6 +10,7 @@ class EmailCodeRequest(BaseModel):
 class OTPRequestResponse(BaseModel):
     ok: bool = True
     needs_name: bool
+    dev_code: str | None = None
 
 class OTPVerify(BaseModel):
     phone_e164: str
