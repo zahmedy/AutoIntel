@@ -2372,8 +2372,8 @@ a {
   display: grid;
   grid-template-columns: minmax(0, 1.56fr) minmax(320px, 1fr);
   grid-template-areas:
-    "main comments"
-    "main actions";
+    "main actions"
+    "main comments";
   align-items: start;
   gap: 1rem;
 }
@@ -2798,13 +2798,14 @@ a {
 
 .chat-panel {
   display: grid;
-  grid-template-rows: minmax(320px, 1fr) auto;
+  grid-template-rows: minmax(0, 1fr) auto;
   gap: 0.75rem;
-  min-height: 430px;
+  height: clamp(360px, 42vh, 480px);
   margin-top: 0.8rem;
   border: 1px solid color-mix(in srgb, var(--brand) 18%, var(--line));
   border-radius: 28px;
   padding: 0.85rem;
+  overflow: hidden;
   background:
     linear-gradient(180deg, #ffffff 0%, color-mix(in srgb, var(--brand-light) 28%, #ffffff) 100%);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8), var(--shadow-card);
@@ -2836,14 +2837,20 @@ a {
 .chat-messages {
   display: flex;
   flex-direction: column;
-  justify-content: flex-end;
+  justify-content: flex-start;
   gap: 0.45rem;
-  max-height: 420px;
+  height: 100%;
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 0.15rem 0.25rem 0.35rem;
   min-height: 0;
   scrollbar-width: thin;
   scrollbar-color: var(--line) transparent;
+}
+
+.chat-messages::before {
+  content: "";
+  margin-top: auto;
 }
 
 .chat-bubble {
@@ -2891,6 +2898,10 @@ a {
   align-items: center;
 }
 
+.chat-messages-empty::before {
+  content: none;
+}
+
 .chat-empty-state {
   margin: 0;
   color: var(--muted);
@@ -2903,6 +2914,7 @@ a {
   grid-template-columns: 1fr auto;
   align-items: center;
   gap: 0.55rem;
+  min-width: 0;
   margin: 0;
   padding: 0.35rem;
   border: 1px solid var(--line);
@@ -2912,6 +2924,8 @@ a {
 }
 
 .chat-input {
+  width: 100%;
+  min-width: 0;
   min-height: 44px;
   border: 0;
   border-radius: 999px;
@@ -3968,8 +3982,8 @@ a {
   .car-detail-page {
     grid-template-areas:
       "main"
-      "comments"
-      "actions";
+      "actions"
+      "comments";
   }
 
   .city-location-grid,
@@ -4382,6 +4396,11 @@ a {
   .chat-panel {
     padding: 0.75rem;
     border-radius: 16px;
+  }
+
+  .chat-panel {
+    height: min(70vh, 460px);
+    min-height: 350px;
   }
 
   .offer-summary {
