@@ -51,6 +51,8 @@ type SavedCarResponse = {
   listing: MyCar;
 };
 
+type ListingView = "active" | "saved" | "archived";
+
 type MeResponse = {
   id: number;
   name: string | null;
@@ -141,8 +143,7 @@ export default function MyCarsPage() {
   const [photoIndexes, setPhotoIndexes] = useState<Record<number, number>>({});
   const [savedCars, setSavedCars] = useState<SavedCarResponse[]>([]);
   const [savedActionId, setSavedActionId] = useState<number | null>(null);
-  const [showSoldCars, setShowSoldCars] = useState(true);
-  const [showArchivedCars, setShowArchivedCars] = useState(false);
+  const [listingView, setListingView] = useState<ListingView>("active");
   const text = {
     missingApiBase: "NEXT_PUBLIC_API_BASE is missing.",
     sessionExpired: "Your session is missing or expired. Please login again.",
@@ -180,8 +181,8 @@ export default function MyCarsPage() {
     saveMessaging: "Save Messaging",
     logout: "Logout",
     listingsSection: "Your Listings",
-    listingsSectionHelp: "Drafts, review, active cars, sold, and archived.",
-    savedCarsSection: "Saved Cars",
+    listingsSectionHelp: "Switch between your listings, saved cars, and archived cars.",
+    savedCarsSection: "Saved",
     savedCarsHelp: "Cars you want to revisit.",
     noSavedCars: "No saved cars yet.",
     savedOn: (value: string) => `Saved ${value}`,
@@ -190,6 +191,7 @@ export default function MyCarsPage() {
     browseCars: "Browse cars",
     sellACar: "Sell a car",
     activeListings: "Active",
+    archivedListings: "Archived",
     draftListings: "Drafts",
     savedListings: "Saved",
     adminBadge: "Admin",
@@ -200,7 +202,7 @@ export default function MyCarsPage() {
     saveUserId: "Update User ID",
     loginRequiredForCars: "Login is required to view your profile.",
     noListingsYet: "No cars yet.",
-    noVisibleListings: "No visible cars with this filter.",
+    noVisibleListings: "No cars here yet.",
     cityNotSet: "Location not set",
     createdOn: (value: string) => `Created ${value}`,
     soldOn: (value: string) => `Sold ${value}`,
@@ -219,8 +221,6 @@ export default function MyCarsPage() {
     reject: "Reject",
     openPublicListing: "View",
     publicPageAfterActive: "Visible after publishing.",
-    showSoldCars: "Show sold cars",
-    showArchivedCars: "Show archived cars",
     restoreListing: "Restore",
     restoring: "Restoring...",
     archiveRestoreUnavailable: "Archived listing cannot be restored.",
@@ -235,15 +235,8 @@ export default function MyCarsPage() {
   }
 
   const canLoad = useMemo(() => Boolean(API_BASE), []);
-  const visibleCars = useMemo(
-    () =>
-      cars.filter((car) => {
-        if (!showSoldCars && car.status === "sold") return false;
-        if (!showArchivedCars && car.status === "expired") return false;
-        return true;
-      }),
-    [cars, showArchivedCars, showSoldCars],
-  );
+  const activeCars = useMemo(() => cars.filter((car) => car.status !== "expired"), [cars]);
+  const archivedCars = useMemo(() => cars.filter((car) => car.status === "expired"), [cars]);
   const profileCounts = useMemo(() => ({
     active: cars.filter((car) => car.status === "active").length,
     drafts: cars.filter((car) => car.status === "draft" || car.status === "rejected" || car.status === "pending_review").length,
@@ -718,6 +711,13 @@ export default function MyCarsPage() {
     });
   }
 
+  const listingTabs: Array<{ id: ListingView; label: string; count: number }> = [
+    { id: "active", label: text.activeListings, count: activeCars.length },
+    { id: "saved", label: text.savedListings, count: savedCars.length },
+    { id: "archived", label: text.archivedListings, count: archivedCars.length },
+  ];
+  const visibleOwnerCars = listingView === "archived" ? archivedCars : activeCars;
+
   return (
     <main className="page shell profile-page">
       <section className="profile-hero">
@@ -728,6 +728,11 @@ export default function MyCarsPage() {
           <div className="hero-actions">
             <Link href="/my-cars/new" className="btn btn-primary">{text.sellACar}</Link>
             <Link href="/search" className="btn btn-secondary">{text.browseCars}</Link>
+            {!needsLogin && me ? (
+              <button type="button" className="btn btn-secondary profile-logout-button" onClick={handleLogout}>
+                {text.logout}
+              </button>
+            ) : null}
           </div>
         </div>
       </section>
@@ -847,9 +852,6 @@ export default function MyCarsPage() {
                 <span>{text.savedListings}</span>
               </div>
             </div>
-            <button type="button" className="btn btn-secondary profile-logout-button" onClick={handleLogout}>
-              {text.logout}
-            </button>
           </div>
         </section>
       )}
@@ -863,7 +865,7 @@ export default function MyCarsPage() {
       {error && <div className="notice error">{error}</div>}
       {success && <div className="notice success">{success}</div>}
 
-      {!loading && !needsLogin && cars.length === 0 && (
+      {!loading && !needsLogin && cars.length === 0 && savedCars.length === 0 && (
         <div className="panel profile-empty">
           <h2 className="subheading">{text.listingsSection}</h2>
           <p className="helper-text">{text.noListingsYet}</p>
@@ -871,48 +873,37 @@ export default function MyCarsPage() {
         </div>
       )}
 
-      {!loading && !needsLogin && cars.length > 0 && (
+      {!loading && !needsLogin && (cars.length > 0 || savedCars.length > 0) && (
         <section className="spaced-top">
           <div className="profile-section-head">
             <div>
               <h2 className="subheading">{text.listingsSection}</h2>
               <p className="helper-text">{text.listingsSectionHelp}</p>
             </div>
-            {cars.some((car) => car.status === "sold" || car.status === "expired") ? (
-              <div className="profile-listing-toggles">
-                {cars.some((car) => car.status === "sold") ? (
-                  <label className="field-toggle profile-sold-toggle" htmlFor="show-sold-cars">
-                    <input
-                      id="show-sold-cars"
-                      type="checkbox"
-                      checked={showSoldCars}
-                      onChange={(event) => setShowSoldCars(event.target.checked)}
-                    />
-                    <span>{text.showSoldCars}</span>
-                  </label>
-                ) : null}
-                {cars.some((car) => car.status === "expired") ? (
-                  <label className="field-toggle profile-sold-toggle" htmlFor="show-archived-cars">
-                    <input
-                      id="show-archived-cars"
-                      type="checkbox"
-                      checked={showArchivedCars}
-                      onChange={(event) => setShowArchivedCars(event.target.checked)}
-                    />
-                    <span>{text.showArchivedCars}</span>
-                  </label>
-                ) : null}
-              </div>
-            ) : null}
+            <div className="profile-listing-switch" role="tablist" aria-label={text.listingsSection}>
+              {listingTabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  className={`profile-listing-switch-button${listingView === tab.id ? " profile-listing-switch-button-active" : ""}`}
+                  role="tab"
+                  aria-selected={listingView === tab.id}
+                  onClick={() => setListingView(tab.id)}
+                >
+                  <span>{tab.label}</span>
+                  <strong>{tab.count}</strong>
+                </button>
+              ))}
+            </div>
           </div>
 
-          {visibleCars.length === 0 ? (
+          {listingView !== "saved" && visibleOwnerCars.length === 0 ? (
             <div className="panel profile-empty">
               <p className="helper-text">{text.noVisibleListings}</p>
             </div>
-          ) : (
+          ) : listingView !== "saved" ? (
             <div className="profile-listing-grid">
-              {visibleCars.map((car) => {
+              {visibleOwnerCars.map((car) => {
               const photos = getOrderedPhotos(car.photos);
               const photoIndex = Math.min(photoIndexes[car.id] ?? 0, Math.max(photos.length - 1, 0));
               const activePhoto = photos[photoIndex]?.public_url || "";
@@ -1045,27 +1036,14 @@ export default function MyCarsPage() {
               );
               })}
             </div>
-          )}
-        </section>
-      )}
-
-      {!loading && !needsLogin ? (
-        <section className="spaced-top profile-saved-section">
-          <div className="profile-section-head">
-            <div>
-              <h2 className="subheading">{text.savedCarsSection}</h2>
-              <p className="helper-text">{text.savedCarsHelp}</p>
-            </div>
-            <Link href="/search" className="btn btn-secondary">{text.browseCars}</Link>
-          </div>
-
-          {savedCarsLoading ? (
+          ) : savedCarsLoading ? (
             <div className="panel profile-empty">
               <p className="helper-text">{text.loading}</p>
             </div>
           ) : savedCars.length === 0 ? (
             <div className="panel profile-empty profile-empty-compact">
               <p className="helper-text">{text.noSavedCars}</p>
+              <Link href="/search" className="btn btn-secondary">{text.browseCars}</Link>
             </div>
           ) : (
             <div className="profile-listing-grid profile-saved-grid">
@@ -1119,7 +1097,7 @@ export default function MyCarsPage() {
             </div>
           )}
         </section>
-      ) : null}
+      )}
     </main>
   );
 }

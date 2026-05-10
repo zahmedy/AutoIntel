@@ -2149,9 +2149,6 @@ a {
 }
 
 .profile-logout-button {
-  position: absolute;
-  top: 0.95rem;
-  right: 0.95rem;
   min-height: 38px;
   margin: 0;
   padding: 0.48rem 0.72rem;
@@ -2275,17 +2272,59 @@ a {
   gap: 0.8rem;
 }
 
-.profile-sold-toggle {
-  flex-shrink: 0;
-  min-height: 2rem;
-  font-size: 0.85rem;
+.profile-listing-switch {
+  display: flex;
+  flex-wrap: nowrap;
+  justify-content: flex-end;
+  gap: 0.35rem;
+  padding: 0.24rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #ffffff;
+  box-shadow: var(--shadow-xs);
 }
 
-.profile-listing-toggles {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 0.75rem;
+.profile-listing-switch-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  min-height: 34px;
+  min-width: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 900;
+  padding: 0.42rem 0.72rem;
+  white-space: nowrap;
+}
+
+.profile-listing-switch-button strong {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.35rem;
+  height: 1.35rem;
+  border-radius: 999px;
+  background: var(--ice);
+  color: inherit;
+  font-size: 0.74rem;
+  line-height: 1;
+}
+
+.profile-listing-switch-button-active {
+  background: var(--brand);
+  color: #ffffff;
+  box-shadow: var(--shadow-xs);
+}
+
+.profile-listing-switch-button-active strong {
+  background: rgba(255, 255, 255, 0.2);
+  color: #ffffff;
 }
 
 .profile-empty {
@@ -4533,13 +4572,8 @@ a {
   }
 
   .profile-identity-card {
-    padding: 1rem 6.6rem 1rem 1rem;
+    padding: 1rem;
     border-radius: 18px;
-  }
-
-  .profile-logout-button {
-    top: 0.8rem;
-    right: 0.8rem;
   }
 
   .profile-collapsible-card {
@@ -4600,6 +4634,21 @@ a {
   .profile-card-toggle:not(:checked) ~ .profile-user-id-form,
   .profile-card-toggle:not(:checked) ~ .profile-contact-preferences {
     display: none;
+  }
+
+  .profile-section-head {
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .profile-listing-switch {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .profile-listing-switch-button {
+    flex: 1 1 0;
+    padding-inline: 0.45rem;
   }
 
   .filters {
