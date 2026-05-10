@@ -729,7 +729,7 @@ export default function MyCarsPage() {
             <Link href="/my-cars/new" className="btn btn-primary">{text.sellACar}</Link>
             <Link href="/search" className="btn btn-secondary">{text.browseCars}</Link>
             {!needsLogin && me ? (
-              <button type="button" className="btn btn-secondary profile-logout-button" onClick={handleLogout}>
+              <button type="button" className="profile-logout-button" onClick={handleLogout}>
                 {text.logout}
               </button>
             ) : null}
@@ -880,6 +880,8 @@ export default function MyCarsPage() {
               <h2 className="subheading">{text.listingsSection}</h2>
               <p className="helper-text">{text.listingsSectionHelp}</p>
             </div>
+          </div>
+          <div className="profile-listing-switch-row">
             <div className="profile-listing-switch" role="tablist" aria-label={text.listingsSection}>
               {listingTabs.map((tab) => (
                 <button
