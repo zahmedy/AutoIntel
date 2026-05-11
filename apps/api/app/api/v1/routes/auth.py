@@ -28,6 +28,12 @@ GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
 GOOGLE_USERINFO_URL = "https://openidconnect.googleapis.com/v1/userinfo"
 GOOGLE_SCOPE = "openid email profile"
+APPLE_AUTH_URL = "https://appleid.apple.com/auth/authorize"
+APPLE_TOKEN_URL = "https://appleid.apple.com/auth/token"
+APPLE_KEYS_URL = "https://appleid.apple.com/auth/keys"
+APPLE_SCOPE = "name email"
+APPLE_ISSUER = "https://appleid.apple.com"
+APPLE_CLIENT_SECRET_TTL_DAYS = 180
 LOCAL_OAUTH_HOSTS = {"localhost", "127.0.0.1", "0.0.0.0"}
 EMAIL_LOGIN_PURPOSE = "email_login"
 
@@ -135,9 +141,27 @@ def _google_redirect_uri(request: Request) -> str:
     )
 
 
+def _apple_redirect_uri(request: Request) -> str:
+    return _configured_or_request_url(
+        settings.APPLE_REDIRECT_URI,
+        request,
+        "/v1/auth/apple/callback",
+        "http://localhost:8000/v1/auth/apple/callback",
+    )
+
+
 def _login_success_url(request: Request) -> str:
     return _configured_or_request_url(
         settings.GOOGLE_LOGIN_SUCCESS_URL,
+        request,
+        "/login",
+        "http://localhost:3001/login",
+    )
+
+
+def _apple_login_success_url(request: Request) -> str:
+    return _configured_or_request_url(
+        settings.APPLE_LOGIN_SUCCESS_URL or settings.GOOGLE_LOGIN_SUCCESS_URL,
         request,
         "/login",
         "http://localhost:3001/login",
@@ -154,6 +178,21 @@ def _configured_google_success_urls(request: Request) -> set[str]:
     return configured_urls
 
 
+def _configured_apple_success_urls(request: Request) -> set[str]:
+    configured_urls = {
+        url.strip()
+        for url in settings.APPLE_ALLOWED_SUCCESS_URLS.split(",")
+        if url.strip()
+    }
+    configured_urls.update(
+        url.strip()
+        for url in settings.GOOGLE_ALLOWED_SUCCESS_URLS.split(",")
+        if url.strip()
+    )
+    configured_urls.add(_apple_login_success_url(request))
+    return configured_urls
+
+
 def _is_safe_local_next(value: str | None) -> bool:
     if not value or not value.startswith("/") or value.startswith("//"):
         return False
@@ -161,9 +200,9 @@ def _is_safe_local_next(value: str | None) -> bool:
     return not parsed.scheme and not parsed.netloc
 
 
-def _is_login_success_url_with_safe_next(request: Request, success_url: str) -> bool:
+def _is_login_success_url_with_safe_next(request: Request, success_url: str, login_success_url: str | None = None) -> bool:
     parsed = urlparse(success_url)
-    login_url = urlparse(_login_success_url(request))
+    login_url = urlparse(login_success_url or _login_success_url(request))
     if (parsed.scheme, parsed.netloc, parsed.path) != (login_url.scheme, login_url.netloc, login_url.path):
         return False
 
@@ -175,14 +214,40 @@ def _is_login_success_url_with_safe_next(request: Request, success_url: str) -> 
     return _is_safe_local_next(query.get("next"))
 
 
-def _validate_google_success_url(request: Request, success_url: str | None) -> str:
+def _validate_success_url(
+    request: Request,
+    success_url: str | None,
+    configured_success_urls: set[str],
+    login_success_url: str,
+    provider_name: str,
+) -> str:
     if not success_url:
-        return _login_success_url(request)
-    if success_url in _configured_google_success_urls(request):
+        return login_success_url
+    if success_url in configured_success_urls:
         return success_url
-    if _is_login_success_url_with_safe_next(request, success_url):
+    if _is_login_success_url_with_safe_next(request, success_url, login_success_url):
         return success_url
-    raise HTTPException(status_code=400, detail="Invalid Google auth callback URL")
+    raise HTTPException(status_code=400, detail=f"Invalid {provider_name} auth callback URL")
+
+
+def _validate_google_success_url(request: Request, success_url: str | None) -> str:
+    return _validate_success_url(
+        request,
+        success_url,
+        _configured_google_success_urls(request),
+        _login_success_url(request),
+        "Google",
+    )
+
+
+def _validate_apple_success_url(request: Request, success_url: str | None) -> str:
+    return _validate_success_url(
+        request,
+        success_url,
+        _configured_apple_success_urls(request),
+        _apple_login_success_url(request),
+        "Apple",
+    )
 
 
 def _safe_google_success_url(request: Request, success_url: str | None) -> str:
@@ -190,6 +255,13 @@ def _safe_google_success_url(request: Request, success_url: str | None) -> str:
         return _validate_google_success_url(request, success_url)
     except HTTPException:
         return _login_success_url(request)
+
+
+def _safe_apple_success_url(request: Request, success_url: str | None) -> str:
+    try:
+        return _validate_apple_success_url(request, success_url)
+    except HTTPException:
+        return _apple_login_success_url(request)
 
 
 def _append_auth_result(success_url: str, key: str, value: str) -> str:
@@ -224,7 +296,32 @@ def _decode_google_state(state: str) -> str | None:
     return success_url if isinstance(success_url, str) else None
 
 
-def _post_form_json(url: str, data: dict[str, str]) -> dict:
+def _create_apple_state(request: Request, success_url: str | None = None) -> str:
+    payload = {
+        "sub": "apple_oauth_state",
+        "success_url": _validate_apple_success_url(request, success_url),
+        "nonce": secrets.token_urlsafe(24),
+        "iat": int(datetime.utcnow().timestamp()),
+    }
+    return jwt.encode(payload, settings.JWT_SECRET, algorithm=ALGORITHM)
+
+
+def _decode_apple_state(state: str) -> tuple[str | None, str | None]:
+    try:
+        payload = jwt.decode(state, settings.JWT_SECRET, algorithms=[ALGORITHM])
+    except JWTError:
+        return None, None
+    if payload.get("sub") != "apple_oauth_state":
+        return None, None
+    success_url = payload.get("success_url")
+    nonce = payload.get("nonce")
+    return (
+        success_url if isinstance(success_url, str) else None,
+        nonce if isinstance(nonce, str) else None,
+    )
+
+
+def _post_form_json(url: str, data: dict[str, str], provider_name: str = "OAuth") -> dict:
     encoded = urlencode(data).encode("utf-8")
     request = urllib.request.Request(
         url,
@@ -237,9 +334,9 @@ def _post_form_json(url: str, data: dict[str, str]) -> dict:
             return json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")
-        raise HTTPException(status_code=502, detail=f"Google token exchange failed: {detail}") from exc
+        raise HTTPException(status_code=502, detail=f"{provider_name} token exchange failed: {detail}") from exc
     except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
-        raise HTTPException(status_code=502, detail="Google token exchange failed") from exc
+        raise HTTPException(status_code=502, detail=f"{provider_name} token exchange failed") from exc
 
 
 def _get_json(url: str, access_token: str) -> dict:
@@ -257,6 +354,18 @@ def _get_json(url: str, access_token: str) -> dict:
         raise HTTPException(status_code=502, detail="Google profile lookup failed") from exc
 
 
+def _get_public_json(url: str, provider_name: str) -> dict:
+    request = urllib.request.Request(url, headers={"Accept": "application/json"})
+    try:
+        with urllib.request.urlopen(request, timeout=15) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")
+        raise HTTPException(status_code=502, detail=f"{provider_name} key lookup failed: {detail}") from exc
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=502, detail=f"{provider_name} key lookup failed") from exc
+
+
 def _exchange_google_code(code: str, redirect_uri: str) -> dict:
     if not settings.GOOGLE_CLIENT_ID or not settings.GOOGLE_CLIENT_SECRET:
         raise HTTPException(status_code=503, detail="Google login is not configured")
@@ -269,11 +378,131 @@ def _exchange_google_code(code: str, redirect_uri: str) -> dict:
             "grant_type": "authorization_code",
             "redirect_uri": redirect_uri,
         },
+        "Google",
     )
 
 
 def _fetch_google_userinfo(access_token: str) -> dict:
     return _get_json(GOOGLE_USERINFO_URL, access_token)
+
+
+def _normalized_apple_private_key() -> str:
+    private_key = settings.APPLE_PRIVATE_KEY or ""
+    return private_key.replace("\\n", "\n").strip()
+
+
+def _apple_login_is_configured() -> bool:
+    return all(
+        [
+            settings.APPLE_CLIENT_ID,
+            settings.APPLE_TEAM_ID,
+            settings.APPLE_KEY_ID,
+            _normalized_apple_private_key(),
+        ]
+    )
+
+
+def _create_apple_client_secret() -> str:
+    if not _apple_login_is_configured():
+        raise HTTPException(status_code=503, detail="Apple login is not configured")
+
+    now = int(datetime.utcnow().timestamp())
+    payload = {
+        "iss": settings.APPLE_TEAM_ID,
+        "iat": now,
+        "exp": now + (APPLE_CLIENT_SECRET_TTL_DAYS * 24 * 60 * 60),
+        "aud": APPLE_ISSUER,
+        "sub": settings.APPLE_CLIENT_ID,
+    }
+    return jwt.encode(
+        payload,
+        _normalized_apple_private_key(),
+        algorithm="ES256",
+        headers={"kid": settings.APPLE_KEY_ID},
+    )
+
+
+def _exchange_apple_code(code: str, redirect_uri: str) -> dict:
+    if not _apple_login_is_configured():
+        raise HTTPException(status_code=503, detail="Apple login is not configured")
+    return _post_form_json(
+        APPLE_TOKEN_URL,
+        {
+            "client_id": settings.APPLE_CLIENT_ID or "",
+            "client_secret": _create_apple_client_secret(),
+            "code": code,
+            "grant_type": "authorization_code",
+            "redirect_uri": redirect_uri,
+        },
+        "Apple",
+    )
+
+
+def _fetch_apple_keys() -> dict:
+    return _get_public_json(APPLE_KEYS_URL, "Apple")
+
+
+def _decode_apple_id_token(id_token: str, nonce: str | None) -> dict:
+    try:
+        header = jwt.get_unverified_header(id_token)
+    except JWTError as exc:
+        raise HTTPException(status_code=400, detail="Invalid Apple identity token") from exc
+
+    key_id = header.get("kid")
+    keys = _fetch_apple_keys().get("keys", [])
+    matching_key = next((key for key in keys if key.get("kid") == key_id), None)
+    if not matching_key:
+        raise HTTPException(status_code=400, detail="Unknown Apple identity token key")
+
+    try:
+        claims = jwt.decode(
+            id_token,
+            matching_key,
+            algorithms=[header.get("alg") or "RS256"],
+            audience=settings.APPLE_CLIENT_ID,
+            issuer=APPLE_ISSUER,
+        )
+    except JWTError as exc:
+        raise HTTPException(status_code=400, detail="Invalid Apple identity token") from exc
+
+    token_nonce = claims.get("nonce")
+    if nonce and token_nonce != nonce:
+        raise HTTPException(status_code=400, detail="Invalid Apple sign-in nonce")
+    return claims
+
+
+def _apple_email_is_verified(value: object) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.lower() == "true"
+    return False
+
+
+def _apple_name_from_user_payload(user_payload: str | None) -> str | None:
+    if not user_payload:
+        return None
+    try:
+        profile = json.loads(user_payload)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(profile, dict):
+        return None
+
+    name = profile.get("name")
+    if isinstance(name, str):
+        return name.strip() or None
+    if not isinstance(name, dict):
+        return None
+
+    first_name = name.get("firstName")
+    last_name = name.get("lastName")
+    parts = [
+        part.strip()
+        for part in (first_name, last_name)
+        if isinstance(part, str) and part.strip()
+    ]
+    return " ".join(parts) or None
 
 
 def require_us_phone(phone_e164: str) -> str:
@@ -435,6 +664,95 @@ def google_callback(
     name = profile.get("name") if isinstance(profile.get("name"), str) else None
     app_token = _issue_token_for_email(session, email, name).access_token
     return RedirectResponse(_append_auth_result(success_url, "access_token", app_token), status_code=302)
+
+
+@router.get("/apple/start")
+def start_apple_login(
+    request: Request,
+    success_url: str | None = None,
+    callback_url: str | None = None,
+):
+    if not _apple_login_is_configured():
+        raise HTTPException(status_code=503, detail="Apple login is not configured")
+    if success_url and callback_url and success_url != callback_url:
+        raise HTTPException(status_code=400, detail="Conflicting Apple auth callback URLs")
+
+    requested_success_url = callback_url or success_url
+    state = _create_apple_state(request, requested_success_url)
+    _, nonce = _decode_apple_state(state)
+
+    query = urlencode({
+        "client_id": settings.APPLE_CLIENT_ID,
+        "redirect_uri": _apple_redirect_uri(request),
+        "response_type": "code",
+        "response_mode": "form_post",
+        "scope": APPLE_SCOPE,
+        "state": state,
+        "nonce": nonce or "",
+    })
+    return RedirectResponse(f"{APPLE_AUTH_URL}?{query}", status_code=302)
+
+
+def _handle_apple_callback(
+    request: Request,
+    session: Session,
+    code: str | None = None,
+    state: str | None = None,
+    error: str | None = None,
+    user: str | None = None,
+):
+    success_url_from_state, nonce = _decode_apple_state(state or "")
+    success_url = _safe_apple_success_url(request, success_url_from_state)
+    if error:
+        return RedirectResponse(_append_auth_result(success_url, "auth_error", error), status_code=302)
+    if not code:
+        return RedirectResponse(_append_auth_result(success_url, "auth_error", "missing_code"), status_code=302)
+
+    token_payload = _exchange_apple_code(code, _apple_redirect_uri(request))
+    id_token = token_payload.get("id_token")
+    if not id_token:
+        return RedirectResponse(_append_auth_result(success_url, "auth_error", "missing_apple_token"), status_code=302)
+
+    claims = _decode_apple_id_token(id_token, nonce)
+    if not _apple_email_is_verified(claims.get("email_verified")):
+        return RedirectResponse(_append_auth_result(success_url, "auth_error", "email_not_verified"), status_code=302)
+
+    email = claims.get("email")
+    if not isinstance(email, str) or not email:
+        return RedirectResponse(_append_auth_result(success_url, "auth_error", "missing_email"), status_code=302)
+
+    app_token = _issue_token_for_email(session, email, _apple_name_from_user_payload(user)).access_token
+    return RedirectResponse(_append_auth_result(success_url, "access_token", app_token), status_code=302)
+
+
+@router.get("/apple/callback")
+def apple_callback_get(
+    request: Request,
+    code: str | None = None,
+    state: str | None = None,
+    error: str | None = None,
+    user: str | None = None,
+    session: Session = Depends(get_session),
+):
+    return _handle_apple_callback(request, session, code=code, state=state, error=error, user=user)
+
+
+@router.post("/apple/callback")
+async def apple_callback_post(
+    request: Request,
+    session: Session = Depends(get_session),
+):
+    body = (await request.body()).decode("utf-8", errors="replace")
+    form = dict(parse_qsl(body, keep_blank_values=True))
+    return _handle_apple_callback(
+        request,
+        session,
+        code=form.get("code"),
+        state=form.get("state"),
+        error=form.get("error"),
+        user=form.get("user"),
+    )
+
 
 @router.post("/request-otp", response_model=OTPRequestResponse)
 def request_otp(payload: OTPRequest, session: Session = Depends(get_session)):

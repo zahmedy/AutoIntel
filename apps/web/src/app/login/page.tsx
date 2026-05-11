@@ -12,7 +12,7 @@ function getSafeNextUrl() {
   return "/";
 }
 
-function getGoogleCallbackUrl() {
+function getOAuthCallbackUrl() {
   const url = new URL(window.location.href);
   url.hash = "";
   return `${url.origin}${url.pathname}${url.search}`;
@@ -24,16 +24,17 @@ function getInitialAuthError() {
   }
   const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
   const authError = hash.get("auth_error");
-  return authError ? `Google sign-in failed: ${authError.replaceAll("_", " ")}` : "";
+  return authError ? `Sign-in failed: ${authError.replaceAll("_", " ")}` : "";
 }
 
 export default function LoginPage() {
   const [error, setError] = useState(getInitialAuthError);
   const text = {
     title: "Sign in to NicheRides",
-    note: "Use Google to manage listings, save cars, make offers, and contact sellers.",
+    note: "Use Google or Apple to manage listings, save cars, make offers, and contact sellers.",
     missingApiBase: "NEXT_PUBLIC_API_BASE is missing.",
     google: "Continue with Google",
+    apple: "Continue with Apple",
   };
 
   useEffect(() => {
@@ -57,7 +58,7 @@ export default function LoginPage() {
     }
   }, []);
 
-  function startGoogleLogin() {
+  function startProviderLogin(provider: "google" | "apple") {
     setError("");
 
     if (!API_BASE) {
@@ -65,7 +66,7 @@ export default function LoginPage() {
       return;
     }
 
-    window.location.href = `${API_BASE}/v1/auth/google/start?callback_url=${encodeURIComponent(getGoogleCallbackUrl())}`;
+    window.location.href = `${API_BASE}/v1/auth/${provider}/start?callback_url=${encodeURIComponent(getOAuthCallbackUrl())}`;
   }
 
   return (
@@ -76,7 +77,7 @@ export default function LoginPage() {
         <p className="auth-note">{text.note}</p>
 
         <div className="auth-provider-stack">
-          <button type="button" className="btn btn-secondary auth-google-btn" onClick={startGoogleLogin}>
+          <button type="button" className="btn btn-secondary auth-google-btn" onClick={() => startProviderLogin("google")}>
             <svg className="auth-google-icon" viewBox="0 0 24 24" aria-hidden="true">
               <path fill="#4285F4" d="M21.6 12.23c0-.78-.07-1.53-.2-2.23H12v4.22h5.38a4.6 4.6 0 0 1-2 3.02v2.51h3.24c1.9-1.75 2.98-4.33 2.98-7.52z" />
               <path fill="#34A853" d="M12 22c2.7 0 4.96-.9 6.62-2.44l-3.24-2.51c-.9.6-2.04.95-3.38.95-2.6 0-4.8-1.76-5.59-4.12H3.06v2.6A10 10 0 0 0 12 22z" />
@@ -84,6 +85,12 @@ export default function LoginPage() {
               <path fill="#EA4335" d="M12 5.99c1.47 0 2.78.5 3.82 1.5l2.87-2.87C16.95 3 14.7 2 12 2a10 10 0 0 0-8.94 5.52l3.35 2.6C7.2 7.75 9.4 5.99 12 5.99z" />
             </svg>
             {text.google}
+          </button>
+          <button type="button" className="btn auth-apple-btn" onClick={() => startProviderLogin("apple")}>
+            <svg className="auth-apple-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path fill="currentColor" d="M16.53 12.73c-.02-2.16 1.77-3.2 1.85-3.25-1.01-1.47-2.58-1.67-3.13-1.69-1.33-.14-2.59.78-3.26.78-.68 0-1.72-.76-2.82-.74-1.45.02-2.78.84-3.53 2.14-1.51 2.62-.39 6.49 1.09 8.61.72 1.04 1.58 2.21 2.71 2.17 1.09-.04 1.5-.7 2.81-.7 1.31 0 1.68.7 2.83.68 1.17-.02 1.91-1.06 2.62-2.1.83-1.21 1.17-2.38 1.19-2.44-.03-.01-2.28-.87-2.36-3.46ZM14.38 6.4c.59-.72.99-1.71.88-2.7-.85.03-1.88.57-2.49 1.28-.55.64-1.03 1.65-.9 2.62.95.07 1.92-.48 2.51-1.2Z" />
+            </svg>
+            {text.apple}
           </button>
           {error && <p className="notice error">{error}</p>}
         </div>

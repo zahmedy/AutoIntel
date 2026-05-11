@@ -11,11 +11,14 @@ from opensearchpy.exceptions import ConnectionError as OpenSearchConnectionError
 from sqlmodel import Session, SQLModel, create_engine, select
 
 from app.api.v1.routes.auth import (
+    _create_apple_state,
     _create_google_state,
     _google_redirect_uri,
+    _handle_apple_callback,
     _login_success_url,
     google_callback,
     request_email_code,
+    start_apple_login,
     start_google_login,
     verify_email_code,
 )
@@ -251,6 +254,57 @@ class PreDeploymentAuthTests(unittest.TestCase):
 
         self.assertEqual(raised.exception.status_code, 400)
         self.assertEqual(raised.exception.detail, "Invalid Google auth callback URL")
+
+    def test_apple_callback_creates_email_user_and_redirects_with_token(self) -> None:
+        request = SimpleNamespace(
+            headers={"host": "localhost:8000"},
+            url=SimpleNamespace(scheme="http", netloc="localhost:8000"),
+        )
+        with patch("app.api.v1.routes.auth.settings.APPLE_LOGIN_SUCCESS_URL", None):
+            state = _create_apple_state(request)
+
+        user_payload = '{"name":{"firstName":"Apple","lastName":"Driver"}}'
+        with Session(self.engine) as session:
+            with (
+                patch("app.api.v1.routes.auth.settings.APPLE_LOGIN_SUCCESS_URL", None),
+                patch("app.api.v1.routes.auth._exchange_apple_code", return_value={"id_token": "apple-token"}),
+                patch(
+                    "app.api.v1.routes.auth._decode_apple_id_token",
+                    return_value={"email": "apple@example.com", "email_verified": "true"},
+                ),
+            ):
+                response = _handle_apple_callback(
+                    request,
+                    session,
+                    code="code",
+                    state=state,
+                    user=user_payload,
+                )
+            user = session.exec(select(User).where(User.email == "apple@example.com")).first()
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("http://localhost:3001/login#access_token=", response.headers["location"])
+        self.assertIsNotNone(user)
+        self.assertEqual(user.name, "Apple Driver")
+
+    def test_apple_start_rejects_unapproved_callback_url(self) -> None:
+        request = SimpleNamespace(
+            headers={"x-forwarded-host": "api.nicherides.com", "x-forwarded-proto": "https"},
+            url=SimpleNamespace(scheme="http", netloc="api:8000"),
+        )
+
+        with (
+            patch("app.api.v1.routes.auth.settings.APPLE_CLIENT_ID", "client"),
+            patch("app.api.v1.routes.auth.settings.APPLE_TEAM_ID", "team"),
+            patch("app.api.v1.routes.auth.settings.APPLE_KEY_ID", "key"),
+            patch("app.api.v1.routes.auth.settings.APPLE_PRIVATE_KEY", "private"),
+            patch("app.api.v1.routes.auth.settings.APPLE_ALLOWED_SUCCESS_URLS", "nicherides://auth"),
+            self.assertRaises(HTTPException) as raised,
+        ):
+            start_apple_login(request, callback_url="https://evil.example/auth")
+
+        self.assertEqual(raised.exception.status_code, 400)
+        self.assertEqual(raised.exception.detail, "Invalid Apple auth callback URL")
 
     def test_google_urls_ignore_localhost_config_on_public_origin(self) -> None:
         request = SimpleNamespace(

@@ -33,6 +33,14 @@ class Settings(BaseSettings):
     GOOGLE_LOGIN_SUCCESS_URL: str | None = None
     GOOGLE_ALLOWED_SUCCESS_URLS: str = ""
 
+    APPLE_CLIENT_ID: str | None = None
+    APPLE_TEAM_ID: str | None = None
+    APPLE_KEY_ID: str | None = None
+    APPLE_PRIVATE_KEY: str | None = None
+    APPLE_REDIRECT_URI: str | None = None
+    APPLE_LOGIN_SUCCESS_URL: str | None = None
+    APPLE_ALLOWED_SUCCESS_URLS: str = ""
+
     EMAIL_FROM: str | None = None
     EMAIL_CODE_TTL_MINUTES: int = 10
     EMAIL_CODE_MIN_SECONDS_BETWEEN_REQUESTS: int = 60
