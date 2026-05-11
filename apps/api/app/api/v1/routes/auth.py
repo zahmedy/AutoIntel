@@ -449,6 +449,10 @@ def _decode_apple_id_token(id_token: str, nonce: str | None) -> dict:
         raise HTTPException(status_code=400, detail="Invalid Apple identity token") from exc
 
     key_id = header.get("kid")
+    algorithm = header.get("alg")
+    if algorithm != "RS256":
+        raise HTTPException(status_code=400, detail="Invalid Apple identity token")
+
     keys = _fetch_apple_keys().get("keys", [])
     matching_key = next((key for key in keys if key.get("kid") == key_id), None)
     if not matching_key:
@@ -457,8 +461,8 @@ def _decode_apple_id_token(id_token: str, nonce: str | None) -> dict:
     try:
         claims = jwt.decode(
             id_token,
-            matching_key,
-            algorithms=[header.get("alg") or "RS256"],
+            {"keys": [matching_key]},
+            algorithms=["RS256"],
             audience=settings.APPLE_CLIENT_ID,
             issuer=APPLE_ISSUER,
         )
@@ -713,7 +717,10 @@ def _handle_apple_callback(
     if not id_token:
         return RedirectResponse(_append_auth_result(success_url, "auth_error", "missing_apple_token"), status_code=302)
 
-    claims = _decode_apple_id_token(id_token, nonce)
+    try:
+        claims = _decode_apple_id_token(id_token, nonce)
+    except HTTPException:
+        return RedirectResponse(_append_auth_result(success_url, "auth_error", "invalid_apple_token"), status_code=302)
     if not _apple_email_is_verified(claims.get("email_verified")):
         return RedirectResponse(_append_auth_result(success_url, "auth_error", "email_not_verified"), status_code=302)
 
