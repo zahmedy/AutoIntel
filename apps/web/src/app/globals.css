@@ -2442,9 +2442,7 @@ a {
 .car-detail-page {
   display: grid;
   grid-template-columns: minmax(0, 1.56fr) minmax(320px, 1fr);
-  grid-template-areas:
-    "main actions"
-    "main comments";
+  grid-template-areas: "main side";
   align-items: start;
   gap: 1rem;
 }
@@ -2455,12 +2453,19 @@ a {
 }
 
 .car-detail-actions {
-  grid-area: actions;
+  min-width: 0;
 }
 
 .car-detail-comments {
-  grid-area: comments;
   align-self: start;
+}
+
+.car-detail-side {
+  grid-area: side;
+  display: grid;
+  align-content: start;
+  gap: 1rem;
+  min-width: 0;
 }
 
 .car-detail-secondary {
@@ -4133,8 +4138,7 @@ a {
   .car-detail-page {
     grid-template-areas:
       "main"
-      "actions"
-      "comments";
+      "side";
   }
 
   .city-location-grid,

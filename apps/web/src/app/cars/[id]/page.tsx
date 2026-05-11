@@ -232,31 +232,33 @@ export default async function CarDetailPage({
         </div>
       </section>
 
-      <aside className="panel car-detail-actions">
-        <OfferForm carId={car.id} ownerId={car.owner_id} publicBiddingEnabled={car.public_bidding_enabled} />
+      <div className="car-detail-side">
+        <aside className="panel car-detail-actions">
+          <OfferForm carId={car.id} ownerId={car.owner_id} publicBiddingEnabled={car.public_bidding_enabled} />
 
-        <hr className="separator" />
+          <hr className="separator" />
 
-        <section>
-          <h2 className="subheading">Contact</h2>
-          {sellerName ? <p className="car-meta">{sellerName}</p> : null}
-          <ContactActions
-            carId={car.id}
-            emailUrl={data.contact.email_url}
-            smsUrl={data.contact.sms_url}
-            whatsappUrl={data.contact.whatsapp_url}
-          />
-          {!data.contact.email_url && !data.contact.sms_url && !data.contact.whatsapp_url ? (
-            <p className="helper-text spaced-top-sm">No direct contact enabled.</p>
-          ) : null}
+          <section>
+            <h2 className="subheading">Contact</h2>
+            {sellerName ? <p className="car-meta">{sellerName}</p> : null}
+            <ContactActions
+              carId={car.id}
+              emailUrl={data.contact.email_url}
+              smsUrl={data.contact.sms_url}
+              whatsappUrl={data.contact.whatsapp_url}
+            />
+            {!data.contact.email_url && !data.contact.sms_url && !data.contact.whatsapp_url ? (
+              <p className="helper-text spaced-top-sm">No direct contact enabled.</p>
+            ) : null}
+          </section>
+
+        </aside>
+
+        <section className="panel car-detail-comments">
+          <h3 className="subheading">Comments</h3>
+          <ChatPanel carId={car.id} />
         </section>
-
-      </aside>
-
-      <section className="panel car-detail-comments">
-        <h3 className="subheading">Comments</h3>
-        <ChatPanel carId={car.id} />
-      </section>
+      </div>
     </main>
   );
 }
