@@ -729,7 +729,7 @@ export default function MyCarsPage() {
             <Link href="/my-cars/new" className="btn btn-primary">{text.sellACar}</Link>
             <Link href="/search" className="btn btn-secondary">{text.browseCars}</Link>
             {!needsLogin && me ? (
-              <button type="button" className="profile-logout-button" onClick={handleLogout}>
+              <button type="button" className="btn btn-secondary" onClick={handleLogout}>
                 {text.logout}
               </button>
             ) : null}
@@ -746,26 +746,32 @@ export default function MyCarsPage() {
                 <span>{text.userIdTitle}</span>
                 <span>{userId ? `@${userId}` : text.publicUserId}</span>
               </label>
-              <div className="profile-account-heading">
-                <h2 className="subheading">{text.userIdTitle}</h2>
+              <div className="profile-account-heading profile-user-id-heading">
+                <div className="profile-setting-icon" aria-hidden="true">@</div>
+                <div>
+                  <h2 className="subheading">{text.userIdTitle}</h2>
+                  <p>{text.userIdHelp}</p>
+                </div>
               </div>
               <form className="profile-user-id-form" onSubmit={saveUserId}>
                 <div className="profile-user-id-field">
                   <label className="label" htmlFor="user-id">{text.publicUserId}</label>
-                  <input
-                    id="user-id"
-                    className="input"
-                    value={userId}
-                    onChange={(e) => setUserId(e.target.value)}
-                    placeholder="user-123"
-                    autoCapitalize="none"
-                    autoCorrect="off"
-                    spellCheck={false}
-                  />
-                  <p className="helper-text">{text.userIdHelp}</p>
+                  <div className="profile-user-id-control">
+                    <span aria-hidden="true">@</span>
+                    <input
+                      id="user-id"
+                      value={userId}
+                      onChange={(e) => setUserId(e.target.value)}
+                      placeholder="user-123"
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      spellCheck={false}
+                    />
+                  </div>
                 </div>
 
                 <div className="profile-user-id-actions">
+                  <span>{userId ? `nicherides.com/u/${userId}` : text.publicUserId}</span>
                   <button type="submit" className="btn btn-secondary" disabled={savingUserId}>
                     {savingUserId ? text.saving : text.saveUserId}
                   </button>
