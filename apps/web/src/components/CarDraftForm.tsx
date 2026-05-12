@@ -654,11 +654,12 @@ export default function CarDraftForm({
     currentStatus: "Current status",
     vinTitle: "NicheRides VIN",
     vinHelp: "Take a close, clear VIN photo or type it manually.",
+    vinPhotoTip: "For best results, keep the VIN sharp and well lit. Crop to the VIN area before uploading if your phone allows it.",
     vinManualLabel: "VIN",
     vinManualPlaceholder: "17-character VIN",
     vinDecode: "Decode VIN",
     vinDecoding: "Decoding...",
-    vinUploadPhoto: "Use camera or upload",
+    vinUploadPhoto: "Take clear VIN photo",
     vinScanning: "Reading VIN...",
     vinReadyForReview: (vin: string) => `VIN ${vin} detected. Confirm the details before applying.`,
     vinApplied: (vin: string) => `VIN ${vin} confirmed. Details applied.`,
@@ -2133,6 +2134,7 @@ export default function CarDraftForm({
                 <div>
                   <p className="location-card-title">{text.vinTitle}</p>
                   <p className="helper-text">{text.vinHelp}</p>
+                  <p className="vin-photo-tip">{text.vinPhotoTip}</p>
                 </div>
                 <input
                   ref={vinInputRef}

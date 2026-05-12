@@ -147,11 +147,11 @@ export default async function HomePage({
       <section className="home-hero">
         <div className="home-hero-copy">
           <h1 className="home-hero-title">
-            <span>List smarter.</span>
-            <span className="home-hero-title-accent">Find better rides.</span>
+            <span>List faster.</span>
+            <span className="home-hero-title-accent">Find your fit nearby.</span>
           </h1>
           <p className="home-hero-sub">
-            Search by real needs, create clean listings, and show buyers where each car fits.
+            Search local listings by real needs, then use fit scores to spot the rides that match your life.
           </p>
         </div>
       </section>

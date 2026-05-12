@@ -16,6 +16,10 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "NicheRides | Find and Sell Cars",
   description: "NicheRides keeps car search and listing simple with clear details, focused filters, and easy seller tools.",
+  icons: {
+    icon: "/brand/nicherides-tab-icon.png",
+    apple: "/brand/nicherides-tab-icon.png",
+  },
 };
 
 export default async function RootLayout({
