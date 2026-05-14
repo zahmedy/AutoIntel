@@ -13,21 +13,15 @@ docker compose -f infra/docker-compose.yaml up --build
 - MinIO API: `http://localhost:9000`
 - MinIO Console: `http://localhost:9001`
 
-## Retrain Pricing Model
+## Price Prediction
 
-Run this from the API environment after Postgres is running. It appends eligible `carlisting` rows to `app_ready.csv`, reruns the notebook, and replaces `car_price_pipeline.pkl` only after the notebook succeeds.
-
-The API uses the tracked LFS pipeline at `app/ml_models/car_price_pipeline.pkl`. Make sure Git LFS files are pulled before building the API image:
+Price prediction is served by the separate `nicherides-ml-platform` service. Point the API at its prediction endpoint:
 
 ```bash
-git lfs pull
-ls -lh apps/api/app/ml_models/car_price_pipeline.pkl
+PRICE_PREDICTION_API_URL=http://127.0.0.1:8080/predict
 ```
 
-```bash
-cd apps/api
-python -m app.tasks.retrain_pricing_model
-```
+If the API runs inside Docker, make sure loopback reaches the ML service by using host networking or a Docker host gateway.
 
 ## VIN Photo OCR
 

@@ -1,139 +1,13 @@
 from __future__ import annotations
 
-from functools import lru_cache
-from pathlib import Path
+from typing import Any
+import json
 import re
-import sys
-import warnings
+import urllib.error
+import urllib.request
 
-import joblib
-import pandas as pd
-from sklearn.exceptions import InconsistentVersionWarning
-from sklearn.base import BaseEstimator, TransformerMixin
-
+from app.core.config import settings
 from app.schemas.car import PricePredictionRequest
-
-ML_MODELS_DIR = Path(__file__).resolve().parent.parent / "ml_models"
-MODEL_PATH = ML_MODELS_DIR / "car_price_pipeline.pkl"
-LEGACY_MODEL_PATH = ML_MODELS_DIR / "pricing_model.pkl"
-REFERENCE_YEAR = 2026
-
-DEPLOY_INPUT_COLUMNS = [
-    "make",
-    "model",
-    "year",
-    "mileage",
-    "body_type",
-    "transmission",
-    "fuel_type",
-    "drivetrain",
-    "engine_cylinders",
-    "engine_volume",
-    "color",
-]
-
-PIPELINE_FEATURE_NAMES = (
-    "Manufacturer",
-    "Model",
-    "Prod. year",
-    "Category",
-    "Fuel type",
-    "Engine volume",
-    "Mileage",
-    "Cylinders",
-    "Gear box type",
-    "Drive wheels",
-    "Color",
-    "car_age",
-    "Engine Displacement",
-    "Miles per year",
-)
-
-ENCODED_MODEL_FEATURE_PREFIXES = (
-    "Manufacturer_",
-    "Color_",
-    "Category_",
-    "Fuel type_",
-    "Drive wheels_",
-)
-ENCODED_MODEL_FEATURE_NAMES = {"Model_te"}
-
-COLOR_MAP = {
-    "Silver": "Silver",
-    "Black": "Black",
-    "White": "White",
-    "Grey": "Gray",
-    "Gray": "Gray",
-    "Blue": "Blue",
-    "Sky blue": "Blue",
-    "Green": "Green",
-    "Red": "Red",
-    "Carnelian red": "Red",
-    "Orange": "Orange",
-    "Yellow": "Gold",
-    "Brown": "Brown",
-    "Golden": "Gold",
-    "Gold": "Gold",
-    "Beige": "Beige",
-    "Purple": "Purple",
-    "Pink": "Red",
-}
-
-BODY_TYPE_MAP = {
-    "Sedan": "Sedan",
-    "SUV": "SUV",
-    "Coupe": "Coupe",
-    "Hatchback": "Hatchback",
-    "Pickup": "Pickup",
-    "Van": "Van",
-    "Wagon": "Wagon",
-    "Convertible": "Convertible",
-    "Jeep": "SUV",
-    "Hatchback": "Hatchback",
-    "Sedan": "Sedan",
-    "Microbus": "Van",
-    "Goods wagon": "Van",
-    "Universal": "Wagon",
-    "Coupe": "Coupe",
-    "Minivan": "Van",
-    "Cabriolet": "Convertible",
-    "Limousine": "Sedan",
-    "Pickup": "Pickup",
-}
-
-GEARBOX_TYPE_MAP = {
-    "Automatic": "Automatic",
-    "Tiptronic": "Automatic",
-    "Variator": "Automatic",
-    "Manual": "Manual",
-}
-
-GEARBOX_VALUE_MAP = {
-    "Manual": 1.0,
-    "Automatic": 0.0,
-}
-
-DRIVE_WHEELS_MAP = {
-    "4x4": "AWD",
-    "Front": "FWD",
-    "Rear": "RWD",
-    "AWD": "AWD",
-    "FWD": "FWD",
-    "RWD": "RWD",
-    "4WD": "AWD",
-}
-
-FUEL_TYPE_MAP = {
-    "Hybrid": "Hybrid",
-    "Plug-in Hybrid": "Hybrid",
-    "Petrol": "Petrol",
-    "Gasoline": "Petrol",
-    "Gas": "Petrol",
-    "Diesel": "Diesel",
-    "CNG": "Petrol",
-    "LPG": "Petrol",
-    "Hydrogen": "Electric",
-}
 
 SUPPORTED_MAKES = [
     "Toyota", "Hyundai", "Nissan", "Kia", "Honda", "Lexus", "GMC",
@@ -377,36 +251,6 @@ def _normalize_make(value: str | None) -> str | None:
     return MAKE_LOOKUP.get(normalized) or MAKE_ALIASES.get(_make_model_key(normalized))
 
 
-def _normalize_color(value: str | None) -> str | None:
-    if not value:
-        return None
-    return COLOR_MAP.get(value.strip())
-
-
-def _normalize_body_type(value: str | None) -> str | None:
-    if not value:
-        return None
-    return BODY_TYPE_MAP.get(value.strip())
-
-
-def _normalize_transmission(value: str | None) -> str | None:
-    if not value:
-        return None
-    return GEARBOX_TYPE_MAP.get(value.strip())
-
-
-def _normalize_drivetrain(value: str | None) -> str | None:
-    if not value:
-        return None
-    return DRIVE_WHEELS_MAP.get(value.strip())
-
-
-def _normalize_fuel_type(value: str | None) -> str | None:
-    if not value:
-        return None
-    return FUEL_TYPE_MAP.get(value.strip())
-
-
 def _canonicalize_model(make: str | None, raw_model: str | None) -> str | None:
     if not make or not raw_model:
         return None
@@ -524,127 +368,8 @@ def canonicalize_vehicle_make_model(
     return make, model
 
 
-def _normalize_engine_volume(value: float | None) -> float:
-    if value is None:
-        return 0.0
-    return float(value)
-
-
-class ModelTargetEncoder(BaseEstimator, TransformerMixin):
-    """Runtime copy of the custom transformer saved inside car_price_pipeline.pkl."""
-
-    def __init__(self, alpha=10):
-        self.alpha = alpha
-
-    def fit(self, X, y):
-        X = X.copy()
-        y = pd.Series(y, index=X.index, name="Price")
-        stats = pd.DataFrame({"Model": X["Model"], "Price": y})
-
-        model_counts = stats.groupby("Model")["Price"].count()
-        model_means = stats.groupby("Model")["Price"].mean()
-        self.global_mean_ = y.mean()
-        self.model_te_ = (
-            (model_means * model_counts) + (self.global_mean_ * self.alpha)
-        ) / (model_counts + self.alpha)
-        return self
-
-    def transform(self, X):
-        X = X.copy()
-        X["Model_te"] = X["Model"].map(self.model_te_).fillna(self.global_mean_)
-        return X[["Model_te"]]
-
-
-@lru_cache(maxsize=1)
-def _load_model():
-    model_path = MODEL_PATH
-    if not model_path.exists():
-        detail = f"Pricing pipeline not found at {MODEL_PATH}."
-        if LEGACY_MODEL_PATH.exists():
-            detail += f" {LEGACY_MODEL_PATH.name} is only the final estimator and cannot be deployed by itself."
-        raise RuntimeError(detail)
-
-    # The notebook saved ModelTargetEncoder from __main__. Registering it here
-    # lets joblib unpickle the existing artifact. Future training should move
-    # custom transformers into an importable module before dumping the model.
-    setattr(sys.modules["__main__"], "ModelTargetEncoder", ModelTargetEncoder)
-
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", InconsistentVersionWarning)
-        model = joblib.load(model_path, mmap_mode="r")
-
-    # Prediction does not benefit from using every CPU here, and lower parallelism
-    # reduces memory pressure when the forest is very large.
-    if hasattr(model, "n_jobs"):
-        model.n_jobs = 1
-    model_step = getattr(model, "named_steps", {}).get("model")
-    if hasattr(model_step, "n_jobs"):
-        model_step.n_jobs = 1
-
-    expected_features = tuple(getattr(model, "feature_names_in_", ()))
-    _validate_model_features(model_path, expected_features)
-    return model
-
-
-def _validate_model_features(model_path: Path, expected_features: tuple[str, ...]) -> None:
-    if not expected_features:
-        return
-
-    encoded_features = [
-        feature
-        for feature in expected_features
-        if feature in ENCODED_MODEL_FEATURE_NAMES
-        or any(feature.startswith(prefix) for prefix in ENCODED_MODEL_FEATURE_PREFIXES)
-    ]
-    if encoded_features:
-        raise RuntimeError(
-            f"Pricing model at {model_path} is the final estimator, not the preprocessing pipeline. "
-            f"Deploy {MODEL_PATH.name} instead."
-        )
-
-    supported_features = set(PIPELINE_FEATURE_NAMES) | set(DEPLOY_INPUT_COLUMNS)
-    unsupported_features = sorted(set(expected_features) - supported_features)
-    if unsupported_features:
-        raise RuntimeError(
-            "Pricing model pipeline inputs do not match the API input map: "
-            + ", ".join(unsupported_features)
-        )
-
-
-def _build_model_input(payload: PricePredictionRequest) -> pd.DataFrame:
-    make = _normalize_make(payload.make)
-    model_name = _canonicalize_model(make, payload.model) or "other"
-    color = _normalize_color(payload.color)
-    body_type = _normalize_body_type(payload.body_type)
-    transmission = _normalize_transmission(payload.transmission)
-    drivetrain = _normalize_drivetrain(payload.drivetrain)
-    fuel_type = _normalize_fuel_type(payload.fuel_type)
-    mileage_value = float(payload.mileage or 0.0)
-    car_age = max(0.0, float(REFERENCE_YEAR - payload.year))
-    miles_per_year = mileage_value / max(1.0, car_age)
-    engine_volume = _normalize_engine_volume(payload.engine_volume)
-    cylinders = float(payload.engine_cylinders or 0.0)
-
-    return pd.DataFrame([{
-        "Manufacturer": make or "other",
-        "Model": model_name,
-        "Prod. year": float(payload.year),
-        "Category": body_type,
-        "Fuel type": fuel_type,
-        "Engine volume": engine_volume,
-        "Mileage": mileage_value,
-        "Cylinders": cylinders,
-        "Gear box type": transmission,
-        "Drive wheels": drivetrain,
-        "Color": color,
-        "car_age": car_age,
-        "Engine Displacement": engine_volume * cylinders,
-        "Miles per year": miles_per_year,
-    }], columns=PIPELINE_FEATURE_NAMES)
-
-
-def _build_deploy_model_input(payload: PricePredictionRequest) -> pd.DataFrame:
-    return pd.DataFrame([{
+def _prediction_request_body(payload: PricePredictionRequest) -> dict[str, Any]:
+    return {
         "make": payload.make,
         "model": payload.model,
         "year": payload.year,
@@ -655,29 +380,56 @@ def _build_deploy_model_input(payload: PricePredictionRequest) -> pd.DataFrame:
         "drivetrain": payload.drivetrain,
         "engine_cylinders": payload.engine_cylinders,
         "engine_volume": payload.engine_volume,
+        "condition": payload.condition,
         "color": payload.color,
-    }], columns=DEPLOY_INPUT_COLUMNS)
+    }
 
 
-def _build_input_for_features(payload: PricePredictionRequest, features: tuple[str, ...]) -> pd.DataFrame:
-    if features == tuple(DEPLOY_INPUT_COLUMNS):
-        return _build_deploy_model_input(payload)
+def _extract_price(response_payload: Any) -> int:
+    if isinstance(response_payload, (int, float)):
+        price = float(response_payload)
+    elif isinstance(response_payload, dict):
+        value = (
+            response_payload.get("price")
+            or response_payload.get("recommended_price")
+            or response_payload.get("predicted_price")
+        )
+        if isinstance(value, dict):
+            value = value.get("amount") or value.get("value")
+        if not isinstance(value, (int, float, str)):
+            raise ValueError("Prediction API response did not include a price.")
+        price = float(value)
+    else:
+        raise ValueError("Prediction API response did not include a price.")
 
-    raw_input = _build_model_input(payload)
-    return raw_input.loc[:, list(features)]
+    if price <= 0:
+        raise RuntimeError("Prediction API returned an invalid price.")
+    return int(round(price))
 
 
 def generate_price_prediction(payload: PricePredictionRequest) -> int:
-    model = _load_model()
-    expected_features = tuple(getattr(model, "feature_names_in_", ()))
-    model_input = (
-        _build_input_for_features(payload, expected_features)
-        if expected_features
-        else _build_model_input(payload)
+    if not settings.PRICE_PREDICTION_API_URL:
+        raise RuntimeError("PRICE_PREDICTION_API_URL is not configured.")
+
+    body = json.dumps(_prediction_request_body(payload)).encode("utf-8")
+    request = urllib.request.Request(
+        settings.PRICE_PREDICTION_API_URL,
+        data=body,
+        headers={"Content-Type": "application/json", "Accept": "application/json"},
+        method="POST",
     )
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", UserWarning)
-        predicted_price = float(model.predict(model_input)[0])
-    if predicted_price <= 0:
-        raise RuntimeError("Pricing model returned an invalid prediction.")
-    return int(round(predicted_price))
+    try:
+        with urllib.request.urlopen(
+            request,
+            timeout=settings.PRICE_PREDICTION_API_TIMEOUT_SECONDS,
+        ) as response:
+            response_payload = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"Prediction API returned {exc.code}: {detail}") from exc
+    except urllib.error.URLError as exc:
+        raise RuntimeError(f"Prediction API request failed: {exc.reason}") from exc
+    except json.JSONDecodeError as exc:
+        raise RuntimeError("Prediction API returned invalid JSON.") from exc
+
+    return _extract_price(response_payload)

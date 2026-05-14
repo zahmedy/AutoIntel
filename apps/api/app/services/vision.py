@@ -60,25 +60,6 @@ REKOGNITION_MAX_IMAGE_BYTES = 4_750_000
 OCR_ROTATION_ANGLES = (0, 12, -12, 20, -20)
 
 
-def predict_car_attributes(photo_urls: list[str]) -> dict:
-    # Stub predictor for plumbing validation. Replace this with a real
-    # model or external vision service once the end-to-end pipeline works.
-    photo_count = len(photo_urls)
-    return {
-        "source": "stub-v1",
-        "make": "Toyota",
-        "model": "Camry",
-        "year_start": 2020,
-        "year_end": 2022,
-        "confidence": min(0.35 + photo_count * 0.1, 0.8),
-        "raw": {
-            "note": "stub result",
-            "photo_count": photo_count,
-            "photo_urls": photo_urls,
-        },
-    }
-
-
 def normalize_vin(raw_text: str) -> str | None:
     return next(iter_vin_candidates(raw_text), None)
 
