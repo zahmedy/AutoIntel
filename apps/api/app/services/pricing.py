@@ -408,9 +408,6 @@ def _extract_price(response_payload: Any) -> int:
 
 
 def generate_price_prediction(payload: PricePredictionRequest) -> int:
-    if not settings.PRICE_PREDICTION_API_URL:
-        raise RuntimeError("PRICE_PREDICTION_API_URL is not configured.")
-
     body = json.dumps(_prediction_request_body(payload)).encode("utf-8")
     request = urllib.request.Request(
         settings.PRICE_PREDICTION_API_URL,

@@ -63,7 +63,7 @@ class Settings(BaseSettings):
 
     OPENAI_API_KEY: str | None = None
     OPENAI_TEXT_MODEL: str = "gpt-4o-mini"
-    PRICE_PREDICTION_API_URL: str | None = None
+    PRICE_PREDICTION_API_URL: str = "http://127.0.0.1:8080/predict"
     PRICE_PREDICTION_API_TIMEOUT_SECONDS: float = 15.0
     VIN_SCAN_DEBUG: bool = False
     VIN_OCR_PROVIDER: str = "auto"
