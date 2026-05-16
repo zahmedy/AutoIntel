@@ -34,6 +34,7 @@ from app.services.niche_scoring import score_listing_for_all_niches
 from app.services.pricing import generate_price_prediction
 from app.services.activity import log_activity_event
 from app.services.vin import decode_vin_with_raw
+from app.services.vin_scan_api import scan_vin_with_external_api
 from app.services.vision import (
     VIN_TEXT_RE,
     detect_vin_from_image,
@@ -110,6 +111,19 @@ def _normalize_typed_vin_or_raise(raw_vin: str) -> str:
     return vin
 
 
+def _scan_vin_from_external_api_or_raise(image_bytes: bytes, content_type: str) -> tuple[str | None, str | None]:
+    payload = scan_vin_with_external_api(image_bytes, content_type)
+    if not payload.get("success"):
+        if settings.VIN_SCAN_DEBUG:
+            logger.info("VIN scan API completed without a VIN: %s", payload)
+        return None, str(payload.get("raw_text") or "") or None
+
+    vin = normalize_vin(str(payload.get("vin") or ""))
+    if not vin and settings.VIN_SCAN_DEBUG:
+        logger.info("VIN scan API returned an invalid VIN payload: %s", _debug_vin_payload(payload))
+    return vin, str(payload.get("raw_text") or "") or None
+
+
 def _load_photos_map(session: Session, car_ids: list[int]) -> dict[int, list[CarPhoto]]:
     if not car_ids:
         return {}
@@ -164,20 +178,29 @@ def scan_vin_photo(
     if len(image_bytes) > MAX_VIN_IMAGE_BYTES:
         raise HTTPException(status_code=413, detail="VIN image is too large.")
 
+    raw_text = None
     try:
-        vin = detect_vin_from_image(image_bytes, content_type)
+        vin, raw_text = _scan_vin_from_external_api_or_raise(image_bytes, content_type)
     except RuntimeError as exc:
         if settings.VIN_SCAN_DEBUG:
-            logger.exception("VIN scan configuration error")
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
-    except ValueError as exc:
-        if settings.VIN_SCAN_DEBUG:
-            logger.exception("VIN scan image validation failed")
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except Exception as exc:
-        if settings.VIN_SCAN_DEBUG:
-            logger.exception("VIN scan OCR failed")
-        raise HTTPException(status_code=502, detail="Failed to read VIN from image.") from exc
+            logger.exception("VIN scan API failed; falling back to local OCR")
+        vin = None
+
+    if not vin:
+        try:
+            vin = detect_vin_from_image(image_bytes, content_type)
+        except RuntimeError as exc:
+            if settings.VIN_SCAN_DEBUG:
+                logger.exception("VIN scan configuration error")
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        except ValueError as exc:
+            if settings.VIN_SCAN_DEBUG:
+                logger.exception("VIN scan image validation failed")
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except Exception as exc:
+            if settings.VIN_SCAN_DEBUG:
+                logger.exception("VIN scan OCR failed")
+            raise HTTPException(status_code=502, detail="Failed to read VIN from image.") from exc
 
     if not vin:
         if settings.VIN_SCAN_DEBUG:
@@ -202,6 +225,11 @@ def scan_vin_photo(
         logger.info("VIN scan raw decoded payload: %s", _debug_raw_vin_decode_payload(raw_decoded))
         logger.info("VIN scan decoded payload: %s", _debug_vin_payload(decoded))
 
+    decoded = {
+        **decoded,
+        "success": True,
+        **({"raw_text": raw_text} if raw_text else {}),
+    }
     return VinScanResponse(**decoded)
 
 

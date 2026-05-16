@@ -18,18 +18,26 @@ docker compose -f infra/docker-compose.yaml up --build
 Price prediction is served by the separate `nicherides-ml-platform` service. Point the API at its prediction endpoint:
 
 ```bash
-PRICE_PREDICTION_API_URL=http://127.0.0.1:8080/predict
+PRICE_PREDICTION_API_URL=http://localhost:8001/v1/price/predict
 ```
 
 Docker Compose points the API container at the host gateway by default:
 
 ```bash
-PRICE_PREDICTION_API_URL=http://host.docker.internal:8080/predict
+PRICE_PREDICTION_API_URL=http://host.docker.internal:8001/v1/price/predict
 ```
 
 ## VIN Photo OCR
 
-VIN photo scanning runs locally with Tesseract OCR, then validates the 17-character VIN checksum before decoding vehicle details. Docker installs Tesseract automatically. For local API development, install the system binary first:
+VIN photo scanning calls the separate `nicherides-ml-platform` service by default, then validates the 17-character VIN checksum before decoding vehicle details:
+
+```bash
+VIN_SCAN_API_URL=http://localhost:8001/v1/vin/photo
+```
+
+Docker Compose uses `http://host.docker.internal:8001/v1/vin/photo` for the same host service.
+
+If that service is not available, VIN photo scanning falls back to local Tesseract OCR. Docker installs Tesseract automatically. For local API development, install the system binary first:
 
 ```bash
 brew install tesseract

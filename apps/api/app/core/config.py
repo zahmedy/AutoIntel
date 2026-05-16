@@ -63,7 +63,7 @@ class Settings(BaseSettings):
 
     OPENAI_API_KEY: str | None = None
     OPENAI_TEXT_MODEL: str = "gpt-4o-mini"
-    PRICE_PREDICTION_API_URL: str = "http://127.0.0.1:8080/predict"
+    PRICE_PREDICTION_API_URL: str = "http://localhost:8001/v1/price/predict"
     PRICE_PREDICTION_API_TIMEOUT_SECONDS: float = 15.0
     VIN_SCAN_DEBUG: bool = False
     VIN_OCR_PROVIDER: str = "auto"
@@ -72,6 +72,8 @@ class Settings(BaseSettings):
     VIN_OCR_AWS_SECRET_ACCESS_KEY: str | None = None
     VIN_OCR_AWS_SESSION_TOKEN: str | None = None
     VIN_OCR_MIN_CONFIDENCE: float = 45.0
+    VIN_SCAN_API_URL: str = "http://localhost:8001/v1/vin/photo"
+    VIN_SCAN_API_TIMEOUT_SECONDS: float = 30.0
     TESSERACT_CMD: str | None = None
 
     model_config = SettingsConfigDict(

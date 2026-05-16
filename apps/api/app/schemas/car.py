@@ -76,7 +76,9 @@ class VinDecodeRequest(BaseModel):
 
 
 class VinScanResponse(BaseModel):
+    success: Optional[bool] = None
     vin: str
+    raw_text: Optional[str] = None
     make: Optional[str] = None
     model: Optional[str] = None
     year: Optional[int] = None
