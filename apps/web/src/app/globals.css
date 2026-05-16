@@ -45,6 +45,7 @@ body {
   font-family: var(--font-body);
   background: linear-gradient(180deg, #ffffff 0%, var(--bg) 30%, #e5eefc 100%);
   min-height: 100vh;
+  padding-top: 67px;
   position: relative;
   overflow-x: clip;
   -webkit-font-smoothing: antialiased;
@@ -107,9 +108,11 @@ a {
 /* ─── Topbar ──────────────────────────────────────────────────────────── */
 
 .topbar {
-  position: sticky;
+  position: fixed;
   top: 0;
-  z-index: 20;
+  left: 0;
+  right: 0;
+  z-index: 1000;
   background: color-mix(in srgb, #ffffff 92%, transparent);
   backdrop-filter: blur(20px) saturate(1.6);
   -webkit-backdrop-filter: blur(20px) saturate(1.6);
@@ -4246,6 +4249,10 @@ a {
 }
 
 @media (max-width: 760px) {
+  body {
+    padding-top: 122px;
+  }
+
   .shell {
     width: min(100% - 1rem, 1160px);
   }
@@ -4895,6 +4902,10 @@ a {
 }
 
 @media (max-width: 520px) {
+  body {
+    padding-top: 116px;
+  }
+
   .topbar-inner {
     grid-template-columns: auto minmax(0, 1fr) auto;
     gap: 0.4rem 0.45rem;
