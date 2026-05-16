@@ -2184,8 +2184,21 @@ a {
 }
 
 .profile-account-panel {
-  border-radius: var(--radius-card);
-  box-shadow: var(--shadow-card);
+  position: relative;
+  border-radius: 22px;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--brand-light) 18%, transparent), transparent 38%),
+    #ffffff;
+  box-shadow: var(--shadow-panel);
+  overflow: hidden;
+}
+
+.profile-account-panel::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 4px;
+  background: linear-gradient(90deg, var(--brand), var(--signal));
 }
 
 .profile-account-layout {
