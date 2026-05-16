@@ -30,6 +30,7 @@ export default function NotificationsPage() {
   const locale = useLocale();
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [clearing, setClearing] = useState(false);
   const [error, setError] = useState("");
   const [token, setToken] = useState("");
 
@@ -125,6 +126,30 @@ export default function NotificationsPage() {
     }
   }
 
+  async function clearAllNotifications() {
+    if (!API_BASE || !token || clearing) {
+      return;
+    }
+
+    setClearing(true);
+    setError("");
+    try {
+      const res = await fetch(`${API_BASE}/v1/notifications`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        throw new Error("Failed to clear notifications.");
+      }
+      setNotifications([]);
+      window.dispatchEvent(new Event("nicherides-notifications-changed"));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to clear notifications.");
+    } finally {
+      setClearing(false);
+    }
+  }
+
   const unreadCount = notifications.filter((notification) => !notification.read_at).length;
 
   return (
@@ -135,11 +160,18 @@ export default function NotificationsPage() {
             <p className="eyebrow">Account</p>
             <h1 className="section-title">Notifications</h1>
           </div>
-          {unreadCount ? (
-            <button type="button" className="btn btn-secondary" onClick={() => void markAllRead()}>
-              Mark all read
-            </button>
-          ) : null}
+          <div className="notification-actions">
+            {unreadCount ? (
+              <button type="button" className="btn btn-secondary" onClick={() => void markAllRead()}>
+                Mark all read
+              </button>
+            ) : null}
+            {notifications.length ? (
+              <button type="button" className="btn btn-secondary" disabled={clearing} onClick={() => void clearAllNotifications()}>
+                {clearing ? "Clearing..." : "Clear all"}
+              </button>
+            ) : null}
+          </div>
         </div>
 
         {loading ? <p className="helper-text spaced-top-sm">Loading notifications...</p> : null}

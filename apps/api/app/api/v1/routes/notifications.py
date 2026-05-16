@@ -29,6 +29,20 @@ def list_notifications(
     return [NotificationOut(**notification.model_dump()) for notification in notifications]
 
 
+@router.delete("")
+def clear_notifications(
+    session: Session = Depends(get_session),
+    user: User = Depends(get_current_user),
+):
+    notifications = session.exec(
+        select(Notification).where(Notification.user_id == user.id)
+    ).all()
+    for notification in notifications:
+        session.delete(notification)
+    session.commit()
+    return {"ok": True, "deleted": len(notifications)}
+
+
 @router.get("/unread-count", response_model=NotificationUnreadCountOut)
 def unread_notification_count(
     session: Session = Depends(get_session),
