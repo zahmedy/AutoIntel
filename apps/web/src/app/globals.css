@@ -3618,6 +3618,39 @@ a {
   margin-bottom: 0;
 }
 
+.price-predict-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.55rem;
+  margin-top: 0.35rem;
+}
+
+.price-predict-summary .helper-text {
+  margin-top: 0;
+}
+
+.price-why-button {
+  min-height: 2rem;
+  padding: 0.35rem 0.7rem;
+}
+
+.price-reason-panel {
+  margin-top: 0.65rem;
+  padding: 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #f8fafc;
+}
+
+.price-reason-panel ul {
+  margin: 0.55rem 0 0;
+  padding-left: 1.1rem;
+  color: var(--text);
+  font-size: 0.86rem;
+  line-height: 1.5;
+}
+
 .field-action-button {
   display: inline-flex;
   align-items: center;

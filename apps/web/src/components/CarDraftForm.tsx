@@ -7,7 +7,7 @@ import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import CityField from "@/components/CityField";
 import MakeModelField from "@/components/MakeModelField";
 import { useLocale } from "@/components/LocaleProvider";
-import { translateApiMessage, translateReviewReason, translateStatus, translateValue, type Locale } from "@/lib/locale";
+import { formatPrice, translateApiMessage, translateReviewReason, translateStatus, translateValue, type Locale } from "@/lib/locale";
 import { findNearestCity } from "@/shared/cities";
 import { canonicalizeMakeModel } from "@/shared/carMakes";
 
@@ -45,6 +45,7 @@ type CarPayload = {
   title: string;
   description?: string;
   public_bidding_enabled: boolean;
+  ml_training_record_id?: number;
 };
 
 type CarOut = CarPayload & {
@@ -103,7 +104,9 @@ type CompleteResponse = {
 };
 
 type VinScanResponse = {
+  training_record_id?: number | null;
   vin: string;
+  model_confidence?: number | null;
   make?: string | null;
   model?: string | null;
   year?: number | null;
@@ -127,6 +130,9 @@ type DescriptionHighlight = {
 
 type PricePredictionResponse = {
   price: number;
+  price_min?: number | null;
+  price_max?: number | null;
+  training_record_id?: number | null;
 };
 
 type PendingPhotoPreview = {
@@ -239,6 +245,74 @@ function parseOptionalFloat(value: string): number | undefined {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return undefined;
   return parsed;
+}
+
+function predictionRangeFromPrice(price: number): { min: number; max: number } {
+  const spread = Math.max(1000, Math.round(price * 0.12));
+  return {
+    min: Math.round(Math.max(500, price - spread) / 500) * 500,
+    max: Math.round((price + spread) / 500) * 500,
+  };
+}
+
+function buildPricingReasons(
+  form: FormState,
+  highlights: string[],
+  predictedPrice: number,
+  range: { min: number; max: number },
+): string[] {
+  const reasons: string[] = [];
+  const make = form.make.trim();
+  const model = form.model.trim();
+  const year = Number(form.year);
+  const mileage = parseOptionalInteger(form.mileage);
+  const currentYear = new Date().getUTCFullYear();
+
+  if (Number.isInteger(year)) {
+    const age = Math.max(currentYear - year, 0);
+    const expectedMileage = Math.max(age, 1) * 12_000;
+    if (mileage !== undefined) {
+      if (mileage < expectedMileage * 0.8) {
+        reasons.push("Mileage is lower than typical use for the vehicle age.");
+      } else if (mileage > expectedMileage * 1.2) {
+        reasons.push("Mileage is higher than typical use for the vehicle age.");
+      }
+    }
+    if (age <= 3) {
+      reasons.push("Vehicle year is newer, which generally supports value.");
+    } else if (age >= 10) {
+      reasons.push("Vehicle age is older, which generally lowers value.");
+    }
+  }
+
+  const demandMake = make.toLowerCase();
+  if (["toyota", "honda", "lexus", "subaru"].includes(demandMake)) {
+    reasons.push(`${make}${model ? ` ${model}` : ""} often has strong resale demand.`);
+  }
+
+  const textSignals = `${form.title} ${form.description} ${form.condition} ${form.fuel_type} ${form.drivetrain}`.toLowerCase();
+  if (highlights.includes("clean title") || textSignals.includes("clean title")) {
+    reasons.push("Clean title generally increases estimated value.");
+  }
+  if (highlights.includes("no accidents") || textSignals.includes("no accident")) {
+    reasons.push("No-accident history generally supports value.");
+  }
+  if (highlights.includes("service records") || textSignals.includes("service record")) {
+    reasons.push("Service records can support buyer confidence.");
+  }
+
+  const listedPrice = parseOptionalInteger(form.price);
+  if (listedPrice !== undefined) {
+    if (listedPrice > range.max) {
+      reasons.push("Your listed price is above the suggested range.");
+    } else if (listedPrice < range.min) {
+      reasons.push("Your listed price is below the suggested range.");
+    } else if (Math.abs(listedPrice - predictedPrice) / predictedPrice <= 0.05) {
+      reasons.push("Your listed price is close to the model midpoint.");
+    }
+  }
+
+  return reasons.slice(0, 5);
 }
 
 async function parseApiError(res: Response): Promise<string> {
@@ -487,7 +561,7 @@ function appendSellerHighlights(description: string, highlights: string[]): stri
   return [baseDescription, highlightsLine].filter(Boolean).join("\n\n");
 }
 
-function buildPayload(form: FormState, highlights: string[]): BuildPayloadResult {
+function buildPayload(form: FormState, highlights: string[], mlTrainingRecordId?: number | null): BuildPayloadResult {
   const city = form.city.trim();
   const make = form.make.trim();
   const model = form.model.trim();
@@ -558,6 +632,7 @@ function buildPayload(form: FormState, highlights: string[]): BuildPayloadResult
     title: title || `${make} ${model} ${year} for sale`,
     description: description || undefined,
     public_bidding_enabled: false,
+    ml_training_record_id: mlTrainingRecordId || undefined,
   };
 
   return { ok: true, payload };
@@ -617,6 +692,9 @@ export default function CarDraftForm({
   const [descriptionHighlights, setDescriptionHighlights] = useState<string[]>([]);
   const [pricePredicting, setPricePredicting] = useState(false);
   const [pricePredictStatus, setPricePredictStatus] = useState("");
+  const [pricePredictReasons, setPricePredictReasons] = useState<string[]>([]);
+  const [showPricePredictReasons, setShowPricePredictReasons] = useState(false);
+  const [mlTrainingRecordId, setMlTrainingRecordId] = useState<number | null>(null);
   const photoCameraInputRef = useRef<HTMLInputElement | null>(null);
   const photoLibraryInputRef = useRef<HTMLInputElement | null>(null);
   const vinInputRef = useRef<HTMLInputElement | null>(null);
@@ -720,7 +798,10 @@ export default function CarDraftForm({
     pricePredict: "Price estimate",
     pricePredicting: "Pricing...",
     pricePredictNeedsBasics: "Fill make, model, and year first.",
-    pricePredictApplied: "Price estimate applied.",
+    pricePredictRange: (min: string, max: string) => `Suggested range: ${min} - ${max}.`,
+    pricePredictWhy: "Why?",
+    pricePredictHideWhy: "Hide why",
+    pricePredictReasonDisclaimer: "These reasons use general market rules and listing details, not live comparable-sales data.",
     pricePredictFailed: "Could not estimate price.",
     pricingNoteTitle: "Price estimate",
     pricingNoteBody: "The estimate uses VIN-decoded fields and your listing details to suggest an asking price. It is not a guaranteed sale price or appraisal.",
@@ -894,6 +975,9 @@ export default function CarDraftForm({
   }
 
   function stageDecodedVinData(data: VinScanResponse) {
+    if (data.training_record_id) {
+      setMlTrainingRecordId(data.training_record_id);
+    }
     setPendingVinData(data);
     setManualVin(data.vin);
     setVinStatusTone("");
@@ -969,7 +1053,11 @@ export default function CarDraftForm({
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ vin }),
+        body: JSON.stringify({
+          vin,
+          car_id: activeCarId || undefined,
+          training_record_id: mlTrainingRecordId || undefined,
+        }),
       });
 
       if (res.status === 401 || res.status === 403) {
@@ -1046,6 +1134,8 @@ export default function CarDraftForm({
         body: JSON.stringify({
           image_base64: imageBase64,
           content_type: inferImageContentType(file),
+          car_id: activeCarId || undefined,
+          training_record_id: mlTrainingRecordId || undefined,
         }),
       });
 
@@ -1181,6 +1271,8 @@ export default function CarDraftForm({
     setError("");
     setSuccess("");
     setPricePredictStatus("");
+    setPricePredictReasons([]);
+    setShowPricePredictReasons(false);
 
     if (!API_BASE) {
       setPricePredictStatus(text.missingApiBase);
@@ -1244,6 +1336,8 @@ export default function CarDraftForm({
           color: form.color.trim() || undefined,
           title: form.title.trim() || undefined,
           description: form.description.trim() || undefined,
+          car_id: activeCarId || undefined,
+          training_record_id: mlTrainingRecordId || undefined,
         }),
       });
 
@@ -1256,8 +1350,16 @@ export default function CarDraftForm({
       }
 
       const data = (await res.json()) as PricePredictionResponse;
+      if (data.training_record_id) {
+        setMlTrainingRecordId(data.training_record_id);
+      }
+      const range = {
+        min: data.price_min ?? predictionRangeFromPrice(data.price).min,
+        max: data.price_max ?? predictionRangeFromPrice(data.price).max,
+      };
       setForm((prev) => ({ ...prev, price: String(data.price) }));
-      setPricePredictStatus(text.pricePredictApplied);
+      setPricePredictReasons(buildPricingReasons({ ...form, price: String(data.price) }, descriptionHighlights, data.price, range));
+      setPricePredictStatus(text.pricePredictRange(formatPrice(range.min, locale), formatPrice(range.max, locale)));
     } catch (err) {
       setPricePredictStatus(
         err instanceof Error ? translateApiMessage(locale, err.message) : text.pricePredictFailed,
@@ -1363,7 +1465,7 @@ export default function CarDraftForm({
   }
 
   async function persistDraft(token: string): Promise<CarOut> {
-    const result = buildPayload(form, descriptionHighlights);
+    const result = buildPayload(form, descriptionHighlights, mlTrainingRecordId);
     if (result.ok === false) {
       throw new Error(result.error);
     }
@@ -2584,7 +2686,30 @@ export default function CarDraftForm({
                     value={form.price}
                     onChange={(e) => setForm((prev) => ({ ...prev, price: e.target.value }))}
                   />
-                  {pricePredictStatus ? <p className="helper-text">{pricePredictStatus}</p> : null}
+                  {pricePredictStatus ? (
+                    <div className="price-predict-summary">
+                      <p className="helper-text">{pricePredictStatus}</p>
+                      {pricePredictReasons.length > 0 ? (
+                        <button
+                          type="button"
+                          className="field-action-button price-why-button"
+                          onClick={() => setShowPricePredictReasons((current) => !current)}
+                        >
+                          {showPricePredictReasons ? text.pricePredictHideWhy : text.pricePredictWhy}
+                        </button>
+                      ) : null}
+                    </div>
+                  ) : null}
+                  {showPricePredictReasons && pricePredictReasons.length > 0 ? (
+                    <div className="price-reason-panel">
+                      <p className="helper-text">{text.pricePredictReasonDisclaimer}</p>
+                      <ul>
+                        {pricePredictReasons.map((reason) => (
+                          <li key={reason}>{reason}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
                 </div>
 
                 <div className="field-card price-note-card">

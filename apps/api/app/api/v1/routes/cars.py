@@ -32,6 +32,11 @@ from app.services.review import build_search_doc, enqueue_auto_review
 from app.services.description import generate_listing_description
 from app.services.niche_scoring import score_listing_for_all_niches
 from app.services.pricing import generate_price_prediction
+from app.services.ml_training import (
+    record_price_prediction_training_data,
+    record_vin_scan_training_data,
+    sync_listing_training_data,
+)
 from app.services.activity import log_activity_event
 from app.services.vin import decode_vin_with_raw
 from app.services.vin_scan_api import scan_vin_with_external_api
@@ -85,11 +90,43 @@ def _debug_raw_vin_decode_payload(payload: dict) -> dict:
     return masked_payload
 
 
+def _extract_model_confidence(payload: dict) -> float | None:
+    for key in ("model_confidence", "confidence", "score", "probability"):
+        value = payload.get(key)
+        if value is None:
+            continue
+        try:
+            confidence = float(value)
+        except (TypeError, ValueError):
+            continue
+        if confidence > 1:
+            confidence = confidence / 100
+        return max(0.0, min(confidence, 1.0))
+    return None
+
+
+def _ensure_optional_car_owner(session: Session, car_id: int | None, user: User) -> int | None:
+    if car_id is None:
+        return None
+    car = session.exec(select(CarListing).where(CarListing.id == car_id)).first()
+    if not car:
+        raise HTTPException(status_code=404, detail="Not found")
+    ensure_owner(car, user)
+    return car.id
+
+
 def _validate_engine_fields(engine_cylinders: int | None, engine_volume: float | None) -> None:
     if engine_cylinders is not None and engine_cylinders <= 0:
         raise HTTPException(status_code=400, detail="Engine cylinders must be a positive integer")
     if engine_volume is not None and engine_volume <= 0:
         raise HTTPException(status_code=400, detail="Engine volume must be a positive number")
+
+
+def _price_prediction_range(price: int) -> tuple[int, int]:
+    spread = max(1000, round(price * 0.12))
+    lower = max(500, price - spread)
+    upper = price + spread
+    return round(lower / 500) * 500, round(upper / 500) * 500
 
 
 def _normalize_typed_vin_or_raise(raw_vin: str) -> str:
@@ -111,17 +148,17 @@ def _normalize_typed_vin_or_raise(raw_vin: str) -> str:
     return vin
 
 
-def _scan_vin_from_external_api_or_raise(image_bytes: bytes, content_type: str) -> tuple[str | None, str | None]:
+def _scan_vin_from_external_api_or_raise(image_bytes: bytes, content_type: str) -> tuple[str | None, str | None, float | None]:
     payload = scan_vin_with_external_api(image_bytes, content_type)
     if not payload.get("success"):
         if settings.VIN_SCAN_DEBUG:
             logger.info("VIN scan API completed without a VIN: %s", payload)
-        return None, str(payload.get("raw_text") or "") or None
+        return None, str(payload.get("raw_text") or "") or None, _extract_model_confidence(payload)
 
     vin = normalize_vin(str(payload.get("vin") or ""))
     if not vin and settings.VIN_SCAN_DEBUG:
         logger.info("VIN scan API returned an invalid VIN payload: %s", _debug_vin_payload(payload))
-    return vin, str(payload.get("raw_text") or "") or None
+    return vin, str(payload.get("raw_text") or "") or None, _extract_model_confidence(payload)
 
 
 def _load_photos_map(session: Session, car_ids: list[int]) -> dict[int, list[CarPhoto]]:
@@ -162,6 +199,7 @@ def to_car_out(car: CarListing, photos: list[CarPhoto] | None = None) -> CarOut:
 @router.post("/cars/vin/scan", response_model=VinScanResponse)
 def scan_vin_photo(
     payload: VinScanRequest,
+    session: Session = Depends(get_session),
     user: User = Depends(get_current_user),
 ):
     content_type = payload.content_type.strip().lower()
@@ -178,9 +216,11 @@ def scan_vin_photo(
     if len(image_bytes) > MAX_VIN_IMAGE_BYTES:
         raise HTTPException(status_code=413, detail="VIN image is too large.")
 
+    car_id = _ensure_optional_car_owner(session, payload.car_id, user)
     raw_text = None
+    model_confidence = None
     try:
-        vin, raw_text = _scan_vin_from_external_api_or_raise(image_bytes, content_type)
+        vin, raw_text, model_confidence = _scan_vin_from_external_api_or_raise(image_bytes, content_type)
     except RuntimeError as exc:
         if settings.VIN_SCAN_DEBUG:
             logger.exception("VIN scan API failed; falling back to local OCR")
@@ -228,17 +268,34 @@ def scan_vin_photo(
     decoded = {
         **decoded,
         "success": True,
+        "model_confidence": model_confidence,
         **({"raw_text": raw_text} if raw_text else {}),
     }
+    training_record = record_vin_scan_training_data(
+        session,
+        user=user,
+        image_bytes=image_bytes,
+        content_type=content_type,
+        detected_vin=vin,
+        corrected_vin=decoded.get("vin") or vin,
+        model_confidence=model_confidence,
+        decoded=decoded,
+        raw_decoded=raw_decoded,
+        car_id=car_id,
+        training_record_id=payload.training_record_id,
+    )
+    decoded["training_record_id"] = training_record.id
     return VinScanResponse(**decoded)
 
 
 @router.post("/cars/vin/decode", response_model=VinScanResponse)
 def decode_typed_vin(
     payload: VinDecodeRequest,
+    session: Session = Depends(get_session),
     user: User = Depends(get_current_user),
 ):
     vin = _normalize_typed_vin_or_raise(payload.vin)
+    car_id = _ensure_optional_car_owner(session, payload.car_id, user)
 
     try:
         decoded, raw_decoded = decode_vin_with_raw(vin)
@@ -250,6 +307,22 @@ def decode_typed_vin(
     if settings.VIN_SCAN_DEBUG:
         logger.info("Typed VIN raw decoded payload: %s", _debug_raw_vin_decode_payload(raw_decoded))
         logger.info("Typed VIN decoded payload: %s", _debug_vin_payload(decoded))
+
+    if payload.training_record_id or car_id:
+        training_record = record_vin_scan_training_data(
+            session,
+            user=user,
+            image_bytes=b"",
+            content_type="",
+            detected_vin=decoded.get("vin") or vin,
+            corrected_vin=vin,
+            model_confidence=None,
+            decoded=decoded,
+            raw_decoded=raw_decoded,
+            car_id=car_id,
+            training_record_id=payload.training_record_id,
+        )
+        decoded["training_record_id"] = training_record.id
 
     return VinScanResponse(**decoded)
 
@@ -277,6 +350,7 @@ def fill_car_description(
 @router.post("/cars/price/predict", response_model=PricePredictionResponse)
 def predict_car_price(
     payload: PricePredictionRequest,
+    session: Session = Depends(get_session),
     user: User = Depends(get_current_user),
 ):
     if payload.year < 1980 or payload.year > datetime.utcnow().year + 1:
@@ -284,6 +358,8 @@ def predict_car_price(
     if payload.mileage is not None and payload.mileage < 0:
         raise HTTPException(status_code=400, detail="Mileage must be zero or a positive integer.")
     _validate_engine_fields(payload.engine_cylinders, payload.engine_volume)
+    if payload.car_id is not None:
+        _ensure_optional_car_owner(session, payload.car_id, user)
 
     try:
         price = generate_price_prediction(payload)
@@ -294,7 +370,20 @@ def predict_car_price(
     except Exception as exc:
         raise HTTPException(status_code=502, detail="Failed to predict price.") from exc
 
-    return PricePredictionResponse(price=price)
+    training_record = record_price_prediction_training_data(
+        session,
+        user=user,
+        payload=payload,
+        price_prediction=price,
+    )
+    price_min, price_max = _price_prediction_range(price)
+
+    return PricePredictionResponse(
+        price=price,
+        price_min=price_min,
+        price_max=price_max,
+        training_record_id=training_record.id,
+    )
 
 
 @router.post("/cars", response_model=CarOut)
@@ -317,7 +406,7 @@ def create_car(
     if payload.longitude is not None and not (-180 <= payload.longitude <= 180):
         raise HTTPException(status_code=400, detail="Invalid longitude")
 
-    data = payload.model_dump(exclude={"title"})
+    data = payload.model_dump(exclude={"title", "ml_training_record_id"})
     data["description"] = (payload.description or "").strip()
 
     car = CarListing(
@@ -327,6 +416,14 @@ def create_car(
         title=title,
     )
     session.add(car)
+    session.commit()
+    session.refresh(car)
+    sync_listing_training_data(
+        session,
+        user=user,
+        car=car,
+        training_record_id=payload.ml_training_record_id,
+    )
     session.commit()
     session.refresh(car)
     photos_map = _load_photos_map(session, [car.id])
@@ -362,7 +459,9 @@ def update_car(
     if car.status not in (CarStatus.draft, CarStatus.pending_review, CarStatus.rejected, CarStatus.active, CarStatus.expired):
         raise HTTPException(status_code=400, detail="Only draft/pending/rejected/active/inactive can be edited")
 
+    previous_price = car.price
     data = payload.model_dump(exclude_unset=True)
+    training_record_id = data.pop("ml_training_record_id", None)
     if "year" in data:
         y = data["year"]
         if y < 1980 or y > datetime.utcnow().year + 1:
@@ -402,6 +501,13 @@ def update_car(
     car.updated_at = datetime.utcnow()
 
     session.add(car)
+    sync_listing_training_data(
+        session,
+        user=user,
+        car=car,
+        training_record_id=training_record_id,
+        previous_price=previous_price,
+    )
     session.commit()
     session.refresh(car)
     if car.status == CarStatus.active:
@@ -580,6 +686,7 @@ def mark_owner_car_sold(
     car.sold_price = payload.sold_price
     car.updated_at = now
     session.add(car)
+    sync_listing_training_data(session, user=user, car=car)
     session.commit()
     session.refresh(car)
     delete_car(str(car_id))

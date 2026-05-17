@@ -11,6 +11,7 @@ from app.models.car import CarListing, CarMedia, SavedCar  # noqa
 from app.models.activity import ActivityEvent  # noqa
 from app.models.lead import Lead  # noqa
 from app.models.report import UserReport  # noqa
+from app.models.ml_training import MLTrainingRecord  # noqa
 
 config = context.config
 fileConfig(config.config_file_name)

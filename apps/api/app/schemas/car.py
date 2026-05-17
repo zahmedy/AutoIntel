@@ -33,6 +33,7 @@ class CarCreate(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
     public_bidding_enabled: bool = False
+    ml_training_record_id: Optional[int] = None
 
 
 class CarUpdate(BaseModel):
@@ -60,6 +61,7 @@ class CarUpdate(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
     public_bidding_enabled: Optional[bool] = None
+    ml_training_record_id: Optional[int] = None
 
 
 class MarkSoldRequest(BaseModel):
@@ -69,16 +71,22 @@ class MarkSoldRequest(BaseModel):
 class VinScanRequest(BaseModel):
     image_base64: str
     content_type: str = "image/jpeg"
+    car_id: Optional[int] = None
+    training_record_id: Optional[int] = None
 
 
 class VinDecodeRequest(BaseModel):
     vin: str
+    car_id: Optional[int] = None
+    training_record_id: Optional[int] = None
 
 
 class VinScanResponse(BaseModel):
     success: Optional[bool] = None
+    training_record_id: Optional[int] = None
     vin: str
     raw_text: Optional[str] = None
+    model_confidence: Optional[float] = None
     make: Optional[str] = None
     model: Optional[str] = None
     year: Optional[int] = None
@@ -117,6 +125,8 @@ class DescriptionFillResponse(BaseModel):
 
 
 class PricePredictionRequest(BaseModel):
+    car_id: Optional[int] = None
+    training_record_id: Optional[int] = None
     city: Optional[str] = None
     district: Optional[str] = None
     make: str
@@ -137,6 +147,9 @@ class PricePredictionRequest(BaseModel):
 
 class PricePredictionResponse(BaseModel):
     price: int
+    price_min: int
+    price_max: int
+    training_record_id: Optional[int] = None
 
 
 class SavedCarStatusOut(BaseModel):
