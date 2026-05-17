@@ -83,6 +83,9 @@ def record_price_prediction_training_data(
     user: User,
     payload: PricePredictionRequest,
     price_prediction: int,
+    model_name: str | None = None,
+    model_version: str | None = None,
+    raw_payload: Any = None,
 ) -> MLTrainingRecord:
     now = datetime.utcnow()
     record = _record_for_update(session, user, payload.training_record_id, payload.car_id)
@@ -91,7 +94,11 @@ def record_price_prediction_training_data(
 
     record.car_id = payload.car_id or record.car_id
     record.price_prediction = price_prediction
+    record.price_model_name = model_name
+    record.price_model_version = model_version
+    record.price_prediction_created_at = now
     record.prediction_payload_json = _json_dumps(payload.model_dump())
+    record.price_prediction_raw_json = _json_dumps(raw_payload) if raw_payload is not None else None
     record.updated_at = now
 
     session.add(record)

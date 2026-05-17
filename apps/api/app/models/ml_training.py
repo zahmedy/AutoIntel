@@ -22,6 +22,9 @@ class MLTrainingRecord(SQLModel, table=True):
     decoded_year: Optional[int] = Field(default=None, index=True)
 
     price_prediction: Optional[int] = Field(default=None, index=True)
+    price_model_name: Optional[str] = Field(default=None, index=True)
+    price_model_version: Optional[str] = Field(default=None, index=True)
+    price_prediction_created_at: Optional[datetime] = Field(default=None, index=True)
     final_listed_price: Optional[int] = Field(default=None, index=True)
     edited_listed_price: Optional[int] = Field(default=None, index=True)
 
@@ -30,6 +33,7 @@ class MLTrainingRecord(SQLModel, table=True):
     days_on_market: Optional[int] = Field(default=None, index=True)
 
     prediction_payload_json: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
+    price_prediction_raw_json: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
     vin_decode_payload_json: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
 
     created_at: datetime = Field(default_factory=datetime.utcnow, index=True)

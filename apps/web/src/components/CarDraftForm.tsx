@@ -132,6 +132,8 @@ type PricePredictionResponse = {
   price: number;
   price_min?: number | null;
   price_max?: number | null;
+  model_name?: string | null;
+  model_version?: string | null;
   training_record_id?: number | null;
 };
 

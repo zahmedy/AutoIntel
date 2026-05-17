@@ -362,7 +362,7 @@ def predict_car_price(
         _ensure_optional_car_owner(session, payload.car_id, user)
 
     try:
-        price = generate_price_prediction(payload)
+        prediction = generate_price_prediction(payload)
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except ValueError as exc:
@@ -370,11 +370,15 @@ def predict_car_price(
     except Exception as exc:
         raise HTTPException(status_code=502, detail="Failed to predict price.") from exc
 
+    price = prediction.price
     training_record = record_price_prediction_training_data(
         session,
         user=user,
         payload=payload,
         price_prediction=price,
+        model_name=prediction.model_name,
+        model_version=prediction.model_version,
+        raw_payload=prediction.raw_payload,
     )
     price_min, price_max = _price_prediction_range(price)
 
@@ -382,6 +386,8 @@ def predict_car_price(
         price=price,
         price_min=price_min,
         price_max=price_max,
+        model_name=prediction.model_name,
+        model_version=prediction.model_version,
         training_record_id=training_record.id,
     )
 

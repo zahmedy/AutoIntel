@@ -9,6 +9,21 @@ import urllib.request
 from app.core.config import settings
 from app.schemas.car import PricePredictionRequest
 
+
+class PricePredictionResult:
+    def __init__(
+        self,
+        *,
+        price: int,
+        model_name: str | None = None,
+        model_version: str | None = None,
+        raw_payload: Any = None,
+    ) -> None:
+        self.price = price
+        self.model_name = model_name
+        self.model_version = model_version
+        self.raw_payload = raw_payload
+
 SUPPORTED_MAKES = [
     "Toyota", "Hyundai", "Nissan", "Kia", "Honda", "Lexus", "GMC",
     "Chevrolet", "Ford", "Tesla", "BMW", "Mercedes-Benz", "Mitsubishi",
@@ -393,6 +408,7 @@ def _extract_price(response_payload: Any) -> int:
             response_payload.get("price")
             or response_payload.get("recommended_price")
             or response_payload.get("predicted_price")
+            or response_payload.get("prediction")
         )
         if isinstance(value, dict):
             value = value.get("amount") or value.get("value")
@@ -407,7 +423,7 @@ def _extract_price(response_payload: Any) -> int:
     return int(round(price))
 
 
-def generate_price_prediction(payload: PricePredictionRequest) -> int:
+def generate_price_prediction(payload: PricePredictionRequest) -> PricePredictionResult:
     body = json.dumps(_prediction_request_body(payload)).encode("utf-8")
     request = urllib.request.Request(
         settings.PRICE_PREDICTION_API_URL,
@@ -429,4 +445,9 @@ def generate_price_prediction(payload: PricePredictionRequest) -> int:
     except json.JSONDecodeError as exc:
         raise RuntimeError("Prediction API returned invalid JSON.") from exc
 
-    return _extract_price(response_payload)
+    return PricePredictionResult(
+        price=_extract_price(response_payload),
+        model_name=response_payload.get("model_name") if isinstance(response_payload, dict) else None,
+        model_version=response_payload.get("model_version") if isinstance(response_payload, dict) else None,
+        raw_payload=response_payload,
+    )

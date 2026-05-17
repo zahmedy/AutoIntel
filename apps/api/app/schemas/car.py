@@ -149,6 +149,8 @@ class PricePredictionResponse(BaseModel):
     price: int
     price_min: int
     price_max: int
+    model_name: Optional[str] = None
+    model_version: Optional[str] = None
     training_record_id: Optional[int] = None
 
 
