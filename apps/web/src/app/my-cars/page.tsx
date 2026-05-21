@@ -236,7 +236,10 @@ export default function MyCarsPage() {
 
   const canLoad = useMemo(() => Boolean(API_BASE), []);
   const activeCars = useMemo(() => cars.filter((car) => car.status !== "expired"), [cars]);
-  const archivedCars = useMemo(() => cars.filter((car) => car.status === "expired"), [cars]);
+  const archivedCars = useMemo(
+    () => cars.filter((car) => canRestoreArchivedListing(car) || isArchivedSoldListing(car)),
+    [cars],
+  );
   const profileCounts = useMemo(() => ({
     active: cars.filter((car) => car.status === "active").length,
     drafts: cars.filter((car) => car.status === "draft" || car.status === "rejected" || car.status === "pending_review").length,
@@ -617,6 +620,10 @@ export default function MyCarsPage() {
     return Date.now() - archivedAt <= 30 * 24 * 60 * 60 * 1000;
   }
 
+  function isArchivedSoldListing(car: MyCar): boolean {
+    return car.status === "expired" && car.status_before_archive === "sold";
+  }
+
   async function restoreCar(carId: number) {
     setError("");
     setSuccess("");
@@ -916,7 +923,8 @@ export default function MyCarsPage() {
               const photoIndex = Math.min(photoIndexes[car.id] ?? 0, Math.max(photos.length - 1, 0));
               const activePhoto = photos[photoIndex]?.public_url || "";
               const hasMultiplePhotos = photos.length > 1;
-              const statusClass = `status-pill status-${car.status.replace(/_/g, "-")}`;
+              const displayStatus = isArchivedSoldListing(car) ? "sold" : car.status;
+              const statusClass = `status-pill status-${displayStatus.replace(/_/g, "-")}`;
 
               return (
                 <article key={car.id} className="car-card profile-listing-card">
@@ -956,7 +964,7 @@ export default function MyCarsPage() {
                   <div className="car-body profile-listing-body">
                     <div className="car-row">
                       <h3 className="car-title">{car.title || `${car.make} ${car.model}`}</h3>
-                      <span className={statusClass}>{translateStatus(locale, car.status)}</span>
+                      <span className={statusClass}>{translateStatus(locale, displayStatus)}</span>
                     </div>
 
                     <p className="car-meta">{car.make} {car.model} • {car.year}</p>
@@ -1036,7 +1044,7 @@ export default function MyCarsPage() {
                     {["draft", "pending_review", "rejected"].includes(car.status) ? (
                       <p className="car-meta card-note">{text.publicPageAfterActive}</p>
                     ) : null}
-                    {car.status === "expired" && !canRestoreArchivedListing(car) ? (
+                    {car.status === "expired" && !canRestoreArchivedListing(car) && !isArchivedSoldListing(car) ? (
                       <p className="car-meta card-note">{text.archiveRestoreUnavailable}</p>
                     ) : null}
                   </div>
