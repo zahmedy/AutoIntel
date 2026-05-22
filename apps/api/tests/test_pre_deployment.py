@@ -45,6 +45,7 @@ from app.api.v1.routes.leads import (
 from app.api.v1.routes.public import public_car_detail
 from app.api.v1.routes.search import _db_search_cars, search_cars
 from app.models.car import CarListing, CarStatus
+from app.models.vehicle_intelligence import PricePredictionRecord, VinDecodeRecord
 from app.models.notification import Notification
 from app.models.user import User, UserRole
 from app.schemas.auth import EmailCodeRequest, EmailCodeVerify
@@ -169,6 +170,60 @@ class PreDeploymentDescriptionTests(unittest.TestCase):
 
         self.assertEqual(car.description, "")
         self.assertEqual(car.title, "Toyota RAV4 2019 for sale")
+
+
+class PreDeploymentVehicleIntelligenceTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.engine = create_engine("sqlite:///:memory:")
+        SQLModel.metadata.create_all(self.engine)
+
+    def test_create_car_links_separate_vin_decode_and_price_prediction_records(self) -> None:
+        with Session(self.engine) as session:
+            seller = User(role=UserRole.seller, name="Seller", email="vehicle-intel@example.com")
+            session.add(seller)
+            session.commit()
+            session.refresh(seller)
+
+            vin_decode = VinDecodeRecord(
+                user_id=seller.id,
+                detected_vin="1HGCM82633A004352",
+                corrected_vin="1HGCM82633A004352",
+                decoded_make="Honda",
+                decoded_model="Accord",
+                decoded_year=2003,
+            )
+            price_prediction = PricePredictionRecord(
+                user_id=seller.id,
+                price_prediction=8200,
+                price_model_name="local",
+                price_model_version="test",
+            )
+            session.add(vin_decode)
+            session.add(price_prediction)
+            session.commit()
+            session.refresh(vin_decode)
+            session.refresh(price_prediction)
+
+            car = create_car(
+                CarCreate(
+                    city="Buffalo",
+                    make="Honda",
+                    model="Accord",
+                    year=2003,
+                    vin_decode_id=vin_decode.id,
+                    price_prediction_id=price_prediction.id,
+                ),
+                session=session,
+                user=seller,
+            )
+
+            linked_vin_decode = session.get(VinDecodeRecord, vin_decode.id)
+            linked_price_prediction = session.get(PricePredictionRecord, price_prediction.id)
+
+            self.assertEqual(linked_vin_decode.car_id, car.id)
+            self.assertEqual(linked_price_prediction.car_id, car.id)
+            self.assertFalse(hasattr(linked_price_prediction, "car_sold"))
+            self.assertFalse(hasattr(linked_price_prediction, "days_on_market"))
 
 
 class PreDeploymentAuthTests(unittest.TestCase):

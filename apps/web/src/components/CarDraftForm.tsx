@@ -47,7 +47,8 @@ type CarPayload = {
   title: string;
   description?: string;
   public_bidding_enabled: boolean;
-  ml_training_record_id?: number;
+  vin_decode_id?: number;
+  price_prediction_id?: number;
 };
 
 type CarOut = CarPayload & {
@@ -106,7 +107,7 @@ type CompleteResponse = {
 };
 
 type VinScanResponse = {
-  training_record_id?: number | null;
+  vin_decode_id?: number | null;
   vin: string;
   model_confidence?: number | null;
   make?: string | null;
@@ -136,7 +137,7 @@ type PricePredictionResponse = {
   price_max?: number | null;
   model_name?: string | null;
   model_version?: string | null;
-  training_record_id?: number | null;
+  price_prediction_id?: number | null;
 };
 
 type PendingPhotoPreview = {
@@ -619,7 +620,12 @@ function appendSellerHighlights(description: string, highlights: string[]): stri
   return [baseDescription, highlightsLine].filter(Boolean).join("\n\n");
 }
 
-function buildPayload(form: FormState, highlights: string[], mlTrainingRecordId?: number | null): BuildPayloadResult {
+function buildPayload(
+  form: FormState,
+  highlights: string[],
+  vinDecodeId?: number | null,
+  pricePredictionId?: number | null,
+): BuildPayloadResult {
   const city = form.city.trim();
   const make = form.make.trim();
   const model = form.model.trim();
@@ -690,7 +696,8 @@ function buildPayload(form: FormState, highlights: string[], mlTrainingRecordId?
     title: title || `${make} ${model} ${year} for sale`,
     description: description || undefined,
     public_bidding_enabled: false,
-    ml_training_record_id: mlTrainingRecordId || undefined,
+    vin_decode_id: vinDecodeId || undefined,
+    price_prediction_id: pricePredictionId || undefined,
   };
 
   return { ok: true, payload };
@@ -752,7 +759,8 @@ export default function CarDraftForm({
   const [pricePredictStatus, setPricePredictStatus] = useState("");
   const [pricePredictReasons, setPricePredictReasons] = useState<string[]>([]);
   const [showPricePredictReasons, setShowPricePredictReasons] = useState(false);
-  const [mlTrainingRecordId, setMlTrainingRecordId] = useState<number | null>(null);
+  const [vinDecodeId, setVinDecodeId] = useState<number | null>(null);
+  const [pricePredictionId, setPricePredictionId] = useState<number | null>(null);
   const photoCameraInputRef = useRef<HTMLInputElement | null>(null);
   const photoLibraryInputRef = useRef<HTMLInputElement | null>(null);
   const vinInputRef = useRef<HTMLInputElement | null>(null);
@@ -1033,8 +1041,8 @@ export default function CarDraftForm({
   }
 
   function stageDecodedVinData(data: VinScanResponse) {
-    if (data.training_record_id) {
-      setMlTrainingRecordId(data.training_record_id);
+    if (data.vin_decode_id) {
+      setVinDecodeId(data.vin_decode_id);
     }
     setPendingVinData(data);
     setManualVin(data.vin);
@@ -1114,7 +1122,7 @@ export default function CarDraftForm({
         body: JSON.stringify({
           vin,
           car_id: activeCarId || undefined,
-          training_record_id: mlTrainingRecordId || undefined,
+          vin_decode_id: vinDecodeId || undefined,
         }),
       });
 
@@ -1200,7 +1208,7 @@ export default function CarDraftForm({
           image_base64: imageBase64,
           content_type: inferImageContentType(uploadFile),
           car_id: activeCarId || undefined,
-          training_record_id: mlTrainingRecordId || undefined,
+          vin_decode_id: vinDecodeId || undefined,
         }),
       });
 
@@ -1402,7 +1410,7 @@ export default function CarDraftForm({
           title: form.title.trim() || undefined,
           description: form.description.trim() || undefined,
           car_id: activeCarId || undefined,
-          training_record_id: mlTrainingRecordId || undefined,
+          price_prediction_id: pricePredictionId || undefined,
         }),
       });
 
@@ -1415,8 +1423,8 @@ export default function CarDraftForm({
       }
 
       const data = (await res.json()) as PricePredictionResponse;
-      if (data.training_record_id) {
-        setMlTrainingRecordId(data.training_record_id);
+      if (data.price_prediction_id) {
+        setPricePredictionId(data.price_prediction_id);
       }
       const range = {
         min: data.price_min ?? predictionRangeFromPrice(data.price).min,
@@ -1530,7 +1538,7 @@ export default function CarDraftForm({
   }
 
   async function persistDraft(token: string): Promise<CarOut> {
-    const result = buildPayload(form, descriptionHighlights, mlTrainingRecordId);
+    const result = buildPayload(form, descriptionHighlights, vinDecodeId, pricePredictionId);
     if (result.ok === false) {
       throw new Error(result.error);
     }

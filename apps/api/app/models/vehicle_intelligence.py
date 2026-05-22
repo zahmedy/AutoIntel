@@ -5,7 +5,9 @@ from sqlalchemy import Column, LargeBinary, Text
 from sqlmodel import Field, SQLModel
 
 
-class MLTrainingRecord(SQLModel, table=True):
+class VinDecodeRecord(SQLModel, table=True):
+    __tablename__ = "vin_decode"
+
     id: Optional[int] = Field(default=None, primary_key=True)
 
     user_id: int = Field(index=True, foreign_key="user.id")
@@ -21,20 +23,27 @@ class MLTrainingRecord(SQLModel, table=True):
     decoded_model: Optional[str] = Field(default=None, index=True)
     decoded_year: Optional[int] = Field(default=None, index=True)
 
+    vin_decode_payload_json: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
+
+    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+    updated_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+
+
+class PricePredictionRecord(SQLModel, table=True):
+    __tablename__ = "price_prediction"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+
+    user_id: int = Field(index=True, foreign_key="user.id")
+    car_id: Optional[int] = Field(default=None, index=True, foreign_key="carlisting.id")
+
     price_prediction: Optional[int] = Field(default=None, index=True)
     price_model_name: Optional[str] = Field(default=None, index=True)
     price_model_version: Optional[str] = Field(default=None, index=True)
     price_prediction_created_at: Optional[datetime] = Field(default=None, index=True)
-    final_listed_price: Optional[int] = Field(default=None, index=True)
-    edited_listed_price: Optional[int] = Field(default=None, index=True)
-
-    car_sold: bool = Field(default=False, index=True)
-    final_sold_price: Optional[int] = Field(default=None, index=True)
-    days_on_market: Optional[int] = Field(default=None, index=True)
 
     prediction_payload_json: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
     price_prediction_raw_json: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
-    vin_decode_payload_json: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
 
     created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
     updated_at: datetime = Field(default_factory=datetime.utcnow, index=True)

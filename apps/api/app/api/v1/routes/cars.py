@@ -31,10 +31,10 @@ from app.services.review import enqueue_auto_review
 from app.services.description import generate_listing_description
 from app.services.niche_scoring import score_listing_for_all_niches
 from app.services.pricing import generate_price_prediction
-from app.services.ml_training import (
-    record_price_prediction_training_data,
-    record_vin_scan_training_data,
-    sync_listing_training_data,
+from app.services.vehicle_intelligence import (
+    attach_vehicle_intelligence_records_to_listing,
+    record_price_prediction_data,
+    record_vin_decode_data,
 )
 from app.services.activity import log_activity_event
 from app.services.vin import decode_vin_with_raw
@@ -270,7 +270,7 @@ def scan_vin_photo(
         "model_confidence": model_confidence,
         **({"raw_text": raw_text} if raw_text else {}),
     }
-    training_record = record_vin_scan_training_data(
+    vin_decode = record_vin_decode_data(
         session,
         user=user,
         image_bytes=image_bytes,
@@ -281,9 +281,9 @@ def scan_vin_photo(
         decoded=decoded,
         raw_decoded=raw_decoded,
         car_id=car_id,
-        training_record_id=payload.training_record_id,
+        vin_decode_id=payload.vin_decode_id,
     )
-    decoded["training_record_id"] = training_record.id
+    decoded["vin_decode_id"] = vin_decode.id
     return VinScanResponse(**decoded)
 
 
@@ -307,8 +307,8 @@ def decode_typed_vin(
         logger.info("Typed VIN raw decoded payload: %s", _debug_raw_vin_decode_payload(raw_decoded))
         logger.info("Typed VIN decoded payload: %s", _debug_vin_payload(decoded))
 
-    if payload.training_record_id or car_id:
-        training_record = record_vin_scan_training_data(
+    if payload.vin_decode_id or car_id:
+        vin_decode = record_vin_decode_data(
             session,
             user=user,
             image_bytes=b"",
@@ -319,9 +319,9 @@ def decode_typed_vin(
             decoded=decoded,
             raw_decoded=raw_decoded,
             car_id=car_id,
-            training_record_id=payload.training_record_id,
+            vin_decode_id=payload.vin_decode_id,
         )
-        decoded["training_record_id"] = training_record.id
+        decoded["vin_decode_id"] = vin_decode.id
 
     return VinScanResponse(**decoded)
 
@@ -371,7 +371,7 @@ def predict_car_price(
         raise HTTPException(status_code=502, detail="Failed to predict price.") from exc
 
     price = prediction.price
-    training_record = record_price_prediction_training_data(
+    price_prediction_record = record_price_prediction_data(
         session,
         user=user,
         payload=payload,
@@ -388,7 +388,7 @@ def predict_car_price(
         price_max=price_max,
         model_name=prediction.model_name,
         model_version=prediction.model_version,
-        training_record_id=training_record.id,
+        price_prediction_id=price_prediction_record.id,
     )
 
 
@@ -412,7 +412,7 @@ def create_car(
     if payload.longitude is not None and not (-180 <= payload.longitude <= 180):
         raise HTTPException(status_code=400, detail="Invalid longitude")
 
-    data = payload.model_dump(exclude={"title", "ml_training_record_id"})
+    data = payload.model_dump(exclude={"title", "vin_decode_id", "price_prediction_id"})
     data["description"] = (payload.description or "").strip()
 
     car = CarListing(
@@ -424,11 +424,12 @@ def create_car(
     session.add(car)
     session.commit()
     session.refresh(car)
-    sync_listing_training_data(
+    attach_vehicle_intelligence_records_to_listing(
         session,
         user=user,
         car=car,
-        training_record_id=payload.ml_training_record_id,
+        vin_decode_id=payload.vin_decode_id,
+        price_prediction_id=payload.price_prediction_id,
     )
     session.commit()
     session.refresh(car)
@@ -465,9 +466,9 @@ def update_car(
     if car.status not in (CarStatus.draft, CarStatus.pending_review, CarStatus.rejected, CarStatus.active, CarStatus.expired):
         raise HTTPException(status_code=400, detail="Only draft/pending/rejected/active/inactive can be edited")
 
-    previous_price = car.price
     data = payload.model_dump(exclude_unset=True)
-    training_record_id = data.pop("ml_training_record_id", None)
+    vin_decode_id = data.pop("vin_decode_id", None)
+    price_prediction_id = data.pop("price_prediction_id", None)
     if "year" in data:
         y = data["year"]
         if y < 1980 or y > datetime.utcnow().year + 1:
@@ -507,12 +508,12 @@ def update_car(
     car.updated_at = datetime.utcnow()
 
     session.add(car)
-    sync_listing_training_data(
+    attach_vehicle_intelligence_records_to_listing(
         session,
         user=user,
         car=car,
-        training_record_id=training_record_id,
-        previous_price=previous_price,
+        vin_decode_id=vin_decode_id,
+        price_prediction_id=price_prediction_id,
     )
     session.commit()
     session.refresh(car)
@@ -690,7 +691,6 @@ def mark_owner_car_sold(
     car.sold_price = payload.sold_price
     car.updated_at = now
     session.add(car)
-    sync_listing_training_data(session, user=user, car=car)
     session.commit()
     session.refresh(car)
     photos_map = _load_photos_map(session, [car.id])
