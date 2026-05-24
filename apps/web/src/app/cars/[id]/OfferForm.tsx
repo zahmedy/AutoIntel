@@ -134,6 +134,7 @@ export default function OfferForm({
     acceptCounter: "Accept Counteroffer",
     accepting: "Accepting...",
     reject: "Reject",
+    rejectCounter: "Reject Counteroffer",
     rejecting: "Rejecting...",
     counter: "Counteroffer",
     countering: "Sending...",
@@ -668,14 +669,24 @@ export default function OfferForm({
                     </>
                   ) : null
                 ) : !isOwner && offer.is_counteroffer && !offer.accepted_at && offersOpen ? (
-                  <button
-                    type="button"
-                    className="btn btn-secondary offer-list-action"
-                    disabled={acceptingId === offer.id}
-                    onClick={() => void handleAccept(offer.id, true)}
-                  >
-                    {acceptingId === offer.id ? text.accepting : text.acceptCounter}
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      className="btn btn-secondary offer-list-action"
+                      disabled={acceptingId === offer.id || rejectingId === offer.id}
+                      onClick={() => void handleAccept(offer.id, true)}
+                    >
+                      {acceptingId === offer.id ? text.accepting : text.acceptCounter}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-danger offer-list-action"
+                      disabled={acceptingId === offer.id || rejectingId === offer.id}
+                      onClick={() => void handleReject(offer.id)}
+                    >
+                      {rejectingId === offer.id ? text.rejecting : text.rejectCounter}
+                    </button>
+                  </>
                 ) : null}
               </div>
             </div>

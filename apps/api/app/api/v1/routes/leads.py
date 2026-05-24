@@ -550,9 +550,6 @@ def reject_offer(
     user: User = Depends(get_current_user),
 ):
     car = _load_active_car(session, car_id)
-    if user.id != car.owner_id:
-        raise HTTPException(status_code=403, detail="Only the listing owner can reject offers")
-
     offer = session.exec(
         select(Lead).where(
             Lead.id == offer_id,
@@ -564,12 +561,18 @@ def reject_offer(
     ).first()
     if not offer:
         raise HTTPException(status_code=404, detail="Offer not found")
+    is_counteroffer = _is_counteroffer(offer)
+    if is_counteroffer:
+        if user.id != offer.buyer_user_id:
+            raise HTTPException(status_code=403, detail="Only the original bidder can reject a counteroffer")
+    elif user.id != car.owner_id:
+        raise HTTPException(status_code=403, detail="Only the listing owner can reject offers")
     if offer.accepted_at:
         raise HTTPException(status_code=400, detail="Unaccept the offer before rejecting it")
 
     now = datetime.utcnow()
     offers_to_reject = [offer]
-    if offer.buyer_user_id is not None:
+    if not is_counteroffer and offer.buyer_user_id is not None:
         offers_to_reject = session.exec(
             select(Lead).where(
                 Lead.car_id == car_id,
@@ -584,16 +587,28 @@ def reject_offer(
     for offer_to_reject in offers_to_reject:
         offer_to_reject.rejected_at = now
         session.add(offer_to_reject)
-    create_notification(
-        session,
-        user_id=offer.buyer_user_id,
-        actor_user_id=user.id,
-        car_id=car.id,
-        notification_type="offer_rejected",
-        title="Offer rejected",
-        body=f"Your offer for {car.year} {car.make} {car.model} was rejected.",
-        metadata={"offer_id": offer.id, "amount": offer.amount},
-    )
+    if is_counteroffer:
+        create_notification(
+            session,
+            user_id=car.owner_id,
+            actor_user_id=user.id,
+            car_id=car.id,
+            notification_type="offer_rejected",
+            title="Counteroffer rejected",
+            body=f"Your counteroffer for {car.year} {car.make} {car.model} was rejected.",
+            metadata={"offer_id": offer.id, "amount": offer.amount, "is_counteroffer": True},
+        )
+    else:
+        create_notification(
+            session,
+            user_id=offer.buyer_user_id,
+            actor_user_id=user.id,
+            car_id=car.id,
+            notification_type="offer_rejected",
+            title="Offer rejected",
+            body=f"Your offer for {car.year} {car.make} {car.model} was rejected.",
+            metadata={"offer_id": offer.id, "amount": offer.amount, "is_counteroffer": False},
+        )
     session.commit()
     session.refresh(offer)
 

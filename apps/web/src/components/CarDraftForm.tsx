@@ -2384,6 +2384,7 @@ export default function CarDraftForm({
                   className="upload-file-input"
                   type="file"
                   accept="image/*"
+                  capture="environment"
                   onChange={(e) => {
                     void handleVinPhotoSelection(e.target.files);
                     e.currentTarget.value = "";

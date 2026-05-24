@@ -812,6 +812,53 @@ class PreDeploymentListingLifecycleTests(unittest.TestCase):
         self.assertEqual(len(owner_notifications), 1)
         self.assertEqual(owner_notifications[0].title, "Counteroffer accepted")
 
+    def test_counteroffer_can_be_rejected_by_original_bidder(self) -> None:
+        with Session(self.engine) as session:
+            owner = User(role=UserRole.seller, name="Owner", email="counter-reject-owner@example.com", verified_at=datetime.utcnow())
+            buyer = User(role=UserRole.buyer, name="Buyer", email="counter-reject-buyer@example.com", verified_at=datetime.utcnow())
+            other_buyer = User(role=UserRole.buyer, name="Other", email="counter-reject-other@example.com", verified_at=datetime.utcnow())
+            session.add(owner)
+            session.add(buyer)
+            session.add(other_buyer)
+            session.commit()
+            session.refresh(owner)
+            session.refresh(buyer)
+            session.refresh(other_buyer)
+
+            listing = make_listing(owner.id)
+            session.add(listing)
+            session.commit()
+            session.refresh(listing)
+
+            offer = create_offer(listing.id, OfferCreate(amount=18_000), session=session, user=buyer)
+            counter = counter_offer(
+                listing.id,
+                offer.id,
+                CounterOfferCreate(amount=19_000),
+                session=session,
+                user=owner,
+            )
+
+            with self.assertRaises(HTTPException) as owner_error:
+                reject_offer(listing.id, counter.id, session=session, user=owner)
+            with self.assertRaises(HTTPException) as other_error:
+                reject_offer(listing.id, counter.id, session=session, user=other_buyer)
+
+            rejected_counter = reject_offer(listing.id, counter.id, session=session, user=buyer)
+            owner_summary = get_manage_offers(listing.id, session=session, user=owner)
+            owner_notifications = session.exec(
+                select(Notification).where(Notification.user_id == owner.id, Notification.type == "offer_rejected")
+            ).all()
+
+        self.assertEqual(owner_error.exception.status_code, 403)
+        self.assertEqual(other_error.exception.status_code, 403)
+        self.assertTrue(rejected_counter.is_counteroffer)
+        self.assertIsNotNone(rejected_counter.rejected_at)
+        self.assertTrue(owner_summary.offers_open)
+        self.assertEqual(owner_summary.offers, [])
+        self.assertEqual(len(owner_notifications), 1)
+        self.assertEqual(owner_notifications[0].title, "Counteroffer rejected")
+
     def test_comment_creates_owner_notification(self) -> None:
         with Session(self.engine) as session:
             owner = User(role=UserRole.seller, name="Owner", email="comment-owner@example.com", verified_at=datetime.utcnow())

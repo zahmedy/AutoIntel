@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
 
@@ -21,6 +21,11 @@ export const metadata: Metadata = {
     icon: "/brand/nicherides-tab-icon.png",
     apple: "/brand/nicherides-tab-icon.png",
   },
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
 };
 
 export default async function RootLayout({

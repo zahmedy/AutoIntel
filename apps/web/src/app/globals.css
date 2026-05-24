@@ -38,6 +38,7 @@ html,
 body {
   margin: 0;
   padding: 0;
+  overflow-x: clip;
 }
 
 body {
@@ -424,6 +425,7 @@ a {
   animation: rise-in 400ms var(--ease-out);
   position: relative;
   z-index: 1;
+  min-width: 0;
 }
 
 /* ─── Hero (generic) ──────────────────────────────────────────────────── */
@@ -1058,6 +1060,7 @@ a {
 .panel {
   padding: 1.1rem;
   box-shadow: var(--shadow-card);
+  min-width: 0;
 }
 
 .panel-compact {
@@ -2552,11 +2555,14 @@ a {
   grid-template-areas: "main side";
   align-items: start;
   gap: 1rem;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .car-detail-main {
   position: relative;
   grid-area: main;
+  min-width: 0;
 }
 
 .car-detail-actions {
@@ -4318,7 +4324,7 @@ a {
   .profile-settings-stack,
   .profile-account-compact,
   .profile-user-id-form {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .car-detail-page {
@@ -4661,6 +4667,7 @@ a {
   .car-detail-comments,
   .car-detail-secondary {
     padding: 0.75rem;
+    min-width: 0;
   }
 
   .listing-head {
