@@ -7,7 +7,6 @@ import { formatDateTime, formatDistance, formatListingPrice, translateValue, typ
 import { getServerLocale } from "@/lib/server-locale";
 import { getServerNiche } from "@/lib/server-niche";
 import { nicheScoreLabel, type NicheScoreResult } from "@/shared/niches";
-import ChatPanel from "./ChatPanel";
 import ContactActions from "./ContactActions";
 import ListingActivityTracker from "./ListingActivityTracker";
 import ListingMoreActions from "./ListingMoreActions";
@@ -177,8 +176,6 @@ export default async function CarDetailPage({
     { label: "District", value: specValue(car.district) },
     { label: "Condition", value: translateValue(locale, car.condition) },
     { label: "Color", value: translateValue(locale, car.color) },
-  ];
-  const technicalSpecs = [
     { label: "Transmission", value: translateValue(locale, car.transmission) },
     { label: "Fuel", value: translateValue(locale, car.fuel_type) },
     { label: "Drivetrain", value: translateValue(locale, car.drivetrain) },
@@ -218,26 +215,15 @@ export default async function CarDetailPage({
         <SpecSection title="Details" items={vehicleDetails} compact />
 
         <div className="car-detail-followup">
-          <SpecSection title="Specs" items={technicalSpecs} collapsible defaultOpen={false} />
-
-          <details className="listing-info-section listing-info-disclosure car-secondary-disclosure">
-            <summary className="listing-section-title listing-section-summary">Description</summary>
-            <p className="body-copy">{car.description}</p>
-          </details>
-
-          <details className="listing-info-section listing-info-disclosure car-secondary-disclosure">
-            <summary className="listing-section-title listing-section-summary">Fit score</summary>
+          <section className="listing-info-section car-secondary-disclosure">
+            <h2 className="listing-section-title">Fit score</h2>
             <NicheScoreSelector listing={car} locale={locale} initialNicheId={selectedNiche.id} />
-          </details>
+          </section>
         </div>
       </section>
 
       <div className="car-detail-side">
         <aside className="panel car-detail-actions">
-          <OfferForm carId={car.id} ownerId={car.owner_id} publicBiddingEnabled={car.public_bidding_enabled} />
-
-          <hr className="separator" />
-
           <section>
             <h2 className="subheading">Contact</h2>
             {sellerName ? <p className="car-meta">{sellerName}</p> : null}
@@ -252,11 +238,15 @@ export default async function CarDetailPage({
             ) : null}
           </section>
 
+          <hr className="separator" />
+
+          <OfferForm carId={car.id} ownerId={car.owner_id} publicBiddingEnabled={car.public_bidding_enabled} />
+
         </aside>
 
         <section className="panel car-detail-comments">
-          <h3 className="subheading">Comments</h3>
-          <ChatPanel carId={car.id} />
+          <h3 className="subheading">Description</h3>
+          <p className="body-copy">{car.description || "No description provided."}</p>
         </section>
       </div>
     </main>
