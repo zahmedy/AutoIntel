@@ -1097,6 +1097,25 @@ a {
   font-size: 0.86rem;
 }
 
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  margin-top: 1.25rem;
+}
+
+.pagination-status {
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-weight: 800;
+}
+
+.pagination-disabled {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
 .empty-state {
   display: grid;
   justify-items: start;

@@ -638,6 +638,54 @@ class PreDeploymentListingLifecycleTests(unittest.TestCase):
         self.assertEqual(result["total"], 1)
         self.assertEqual(result["items"][0]["title"], "Boundary car")
 
+    def test_public_db_search_paginates_results(self) -> None:
+        with Session(self.engine) as session:
+            user = User(
+                role=UserRole.seller,
+                name="Seller",
+                user_id="seller-pagination",
+                phone_e164="+15550000001",
+                verified_at=datetime.utcnow(),
+            )
+            session.add(user)
+            session.commit()
+            session.refresh(user)
+
+            now = datetime.utcnow()
+            session.add(make_listing(user.id, title="Newest car", published_at=now))
+            session.add(make_listing(user.id, title="Middle car", published_at=now - timedelta(hours=1)))
+            session.add(make_listing(user.id, title="Oldest car", published_at=now - timedelta(hours=2)))
+            session.commit()
+
+            result = _db_search_cars(
+                city=None,
+                make=None,
+                model=None,
+                year_min=None,
+                year_max=None,
+                price_min=None,
+                price_max=None,
+                mileage_max=None,
+                transmission=None,
+                fuel_type=None,
+                drivetrain=None,
+                body_type=None,
+                lat=None,
+                lon=None,
+                radius_km=None,
+                keyword_query=None,
+                sort="newest",
+                page=2,
+                page_size=1,
+                session=session,
+            )
+
+        self.assertEqual(result["page"], 2)
+        self.assertEqual(result["page_size"], 1)
+        self.assertEqual(result["total"], 3)
+        self.assertEqual(len(result["items"]), 1)
+        self.assertEqual(result["items"][0]["title"], "Middle car")
+
     def test_public_car_detail_includes_email_contact_when_seller_has_email(self) -> None:
         with Session(self.engine) as session:
             user = User(

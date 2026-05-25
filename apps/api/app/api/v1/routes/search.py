@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, Query
+from sqlalchemy import func, or_
 from sqlmodel import Session, select
 
 from app.db.session import get_session
@@ -129,32 +130,41 @@ def _db_search_cars(
     if year_max is not None:
         statement = statement.where(CarListing.year <= year_max)
     if price_min is not None:
-        statement = statement.where(CarListing.price != None, CarListing.price >= price_min)
+        statement = statement.where(CarListing.price.is_not(None), CarListing.price >= price_min)
     if price_max is not None:
-        statement = statement.where(CarListing.price != None, CarListing.price <= price_max)
+        statement = statement.where(CarListing.price.is_not(None), CarListing.price <= price_max)
     if mileage_max is not None:
-        statement = statement.where(CarListing.mileage != None, CarListing.mileage <= mileage_max)
+        statement = statement.where(CarListing.mileage.is_not(None), CarListing.mileage <= mileage_max)
 
-    listings = list(session.exec(statement).all())
     if keyword_query:
         terms = [term for term in keyword_query.lower().split() if term]
-        listings = [
-            listing
-            for listing in listings
-            if _listing_matches_keywords(listing, terms)
-        ]
+        for term in terms:
+            pattern = f"%{term}%"
+            statement = statement.where(
+                or_(
+                    CarListing.title.ilike(pattern),
+                    CarListing.description.ilike(pattern),
+                    CarListing.make.ilike(pattern),
+                    CarListing.model.ilike(pattern),
+                    CarListing.city.ilike(pattern),
+                    CarListing.body_type.ilike(pattern),
+                    CarListing.fuel_type.ilike(pattern),
+                    CarListing.drivetrain.ilike(pattern),
+                )
+            )
+
+    total = session.exec(select(func.count()).select_from(statement.subquery())).one()
 
     if sort == "price_asc":
-        listings.sort(key=lambda listing: (listing.price is None, listing.price or 0, listing.published_at or listing.created_at), reverse=False)
+        statement = statement.order_by(CarListing.price.is_(None), CarListing.price.asc(), CarListing.published_at.desc(), CarListing.id.desc())
     elif sort == "price_desc":
-        listings.sort(key=lambda listing: (listing.price is not None, listing.price or 0, listing.published_at or listing.created_at), reverse=True)
+        statement = statement.order_by(CarListing.price.is_(None), CarListing.price.desc(), CarListing.published_at.desc(), CarListing.id.desc())
     elif sort == "mileage_asc":
-        listings.sort(key=lambda listing: (listing.mileage is None, listing.mileage or 0, listing.published_at or listing.created_at), reverse=False)
+        statement = statement.order_by(CarListing.mileage.is_(None), CarListing.mileage.asc(), CarListing.published_at.desc(), CarListing.id.desc())
     else:
-        listings.sort(key=lambda listing: listing.published_at or listing.created_at, reverse=True)
+        statement = statement.order_by(CarListing.published_at.desc(), CarListing.created_at.desc(), CarListing.id.desc())
 
-    total = len(listings)
-    page_items = listings[(page - 1) * page_size: page * page_size]
+    page_items = list(session.exec(statement.offset((page - 1) * page_size).limit(page_size)).all())
     listing_ids = [listing.id for listing in page_items if listing.id is not None]
     photos_by_listing_id = _photos_by_listing(session, listing_ids)
     seller_user_ids = _seller_user_ids(session, {listing.owner_id for listing in page_items})
@@ -171,25 +181,6 @@ def _db_search_cars(
             for listing in page_items
         ],
     }
-
-
-def _listing_matches_keywords(listing: CarListing, terms: list[str]) -> bool:
-    if not terms:
-        return True
-    haystack = " ".join(
-        str(value or "")
-        for value in (
-            listing.title,
-            listing.description,
-            listing.make,
-            listing.model,
-            listing.city,
-            listing.body_type,
-            listing.fuel_type,
-            listing.drivetrain,
-        )
-    ).lower()
-    return all(term in haystack for term in terms)
 
 
 @router.get("/cars")

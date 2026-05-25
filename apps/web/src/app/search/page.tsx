@@ -66,6 +66,8 @@ type Query = {
   lon?: string;
   radius_mi?: string;
   radius_km?: string;
+  page?: string;
+  page_size?: string;
 };
 
 const MILES_TO_KM = 1.60934;
@@ -157,6 +159,21 @@ function clearFiltersHref(selectedNicheId: string): string {
   return selectedNicheId ? `/search?niche=${encodeURIComponent(selectedNicheId)}` : "/search";
 }
 
+function searchPageHref(params: Query, selectedNicheId: string, page: number): string {
+  const query = new URLSearchParams();
+  if (selectedNicheId) query.set("niche", selectedNicheId);
+  for (const key of FILTER_KEYS) {
+    const value = params[key];
+    if (value) {
+      query.set(key, value);
+    }
+  }
+  if (page > 1) {
+    query.set("page", String(page));
+  }
+  return `/search${query.toString() ? `?${query.toString()}` : ""}`;
+}
+
 export default async function SearchPage({
   searchParams,
 }: {
@@ -172,6 +189,8 @@ export default async function SearchPage({
     : Number.isFinite(oldRadiusKm) && oldRadiusKm >= 1 && oldRadiusKm <= 805
       ? Math.max(1, Math.round(oldRadiusKm / 1.60934))
       : 50;
+  const requestedPage = Number(params.page);
+  const currentPage = Number.isFinite(requestedPage) && requestedPage >= 1 ? Math.trunc(requestedPage) : 1;
 
   const qs = new URLSearchParams();
   if (params.niche) qs.set("niche", params.niche);
@@ -194,6 +213,7 @@ export default async function SearchPage({
   if (params.lon) qs.set("lon", params.lon);
   if (params.radius_mi) qs.set("radius_mi", params.radius_mi);
   else if (params.radius_km) qs.set("radius_km", params.radius_km);
+  qs.set("page", String(currentPage));
 
   qs.delete("niche");
   const path = qs.toString() ? `/v1/search/cars?${qs.toString()}` : "/v1/search/cars";
@@ -207,6 +227,11 @@ export default async function SearchPage({
     fetchError = err instanceof Error ? err.message : "Failed to load search results.";
   }
   const resultCount = data.items.length;
+  const totalPages = Math.max(1, Math.ceil(data.total / data.page_size));
+  const pageStart = data.total === 0 ? 0 : (data.page - 1) * data.page_size + 1;
+  const pageEnd = Math.min(data.page * data.page_size, data.total);
+  const previousPageHref = data.page > 1 ? searchPageHref(params, selectedNiche.id, data.page - 1) : "";
+  const nextPageHref = data.page < totalPages ? searchPageHref(params, selectedNiche.id, data.page + 1) : "";
   const showClearFilters = hasActiveFilters(params) && resultCount > 0 && resultCount <= LOW_RESULT_THRESHOLD;
   const filterCount = activeFilterCount(params);
   const formKey = filterFormKey(params);
@@ -336,8 +361,8 @@ export default async function SearchPage({
         <section>
           <div className="results-bar">
             <div>
-              <strong>{resultCount}</strong> cars found
-              <p>Sorted and filtered for a faster browse.</p>
+              <strong>{data.total}</strong> cars found
+              <p>{data.total > 0 ? `Showing ${pageStart}-${pageEnd}` : "Sorted and filtered for a faster browse."}</p>
             </div>
             {showClearFilters ? (
               <Link href={clearHref} className="btn btn-secondary">Clear filters</Link>
@@ -384,6 +409,22 @@ export default async function SearchPage({
               })}
             </div>
           )}
+
+          {data.total > data.page_size ? (
+            <nav className="pagination" aria-label="Search result pages">
+              {previousPageHref ? (
+                <Link href={previousPageHref} className="btn btn-secondary">Previous</Link>
+              ) : (
+                <span className="btn btn-secondary pagination-disabled">Previous</span>
+              )}
+              <span className="pagination-status">Page {data.page} of {totalPages}</span>
+              {nextPageHref ? (
+                <Link href={nextPageHref} className="btn btn-secondary">Next</Link>
+              ) : (
+                <span className="btn btn-secondary pagination-disabled">Next</span>
+              )}
+            </nav>
+          ) : null}
         </section>
       </section>
     </main>
