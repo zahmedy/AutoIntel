@@ -3728,11 +3728,12 @@ a {
 
 .vin-secondary-actions {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
   gap: 0.55rem;
 }
 
 .vin-camera-button,
+.vin-library-button,
 .vin-paste-button {
   width: 100%;
   min-height: 2.8rem;
@@ -4989,6 +4990,7 @@ a {
   .upload-camera-button,
   .upload-library-button,
   .vin-camera-button,
+  .vin-library-button,
   .vin-paste-button,
   .vin-confirmation-actions .btn,
   .vin-confirmation-actions .field-action-button {

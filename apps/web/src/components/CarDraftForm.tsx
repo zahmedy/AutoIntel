@@ -763,7 +763,8 @@ export default function CarDraftForm({
   const [pricePredictionId, setPricePredictionId] = useState<number | null>(null);
   const photoCameraInputRef = useRef<HTMLInputElement | null>(null);
   const photoLibraryInputRef = useRef<HTMLInputElement | null>(null);
-  const vinInputRef = useRef<HTMLInputElement | null>(null);
+  const vinCameraInputRef = useRef<HTMLInputElement | null>(null);
+  const vinLibraryInputRef = useRef<HTMLInputElement | null>(null);
 
   const activeCarId = useMemo(
     () => (mode === "edit" ? (carId ?? null) : createdId),
@@ -823,7 +824,8 @@ export default function CarDraftForm({
     vinManualPlaceholder: "17-character VIN",
     vinDecode: "Decode VIN",
     vinDecoding: "Decoding...",
-    vinUploadPhoto: "VIN Photo",
+    vinTakePhoto: "Take VIN Photo",
+    vinChoosePhoto: "Choose VIN Photo",
     vinPaste: "Paste VIN",
     vinPasteApplied: "VIN pasted. Review it before decoding.",
     vinPasteEmpty: "Clipboard does not contain a VIN.",
@@ -2380,11 +2382,22 @@ export default function CarDraftForm({
                   <p className="helper-text">{text.vinHelp}</p>
                 </div>
                 <input
-                  ref={vinInputRef}
+                  ref={vinCameraInputRef}
                   className="upload-file-input"
                   type="file"
                   accept="image/*"
                   capture="environment"
+                  onChange={(e) => {
+                    void handleVinPhotoSelection(e.target.files);
+                    e.currentTarget.value = "";
+                  }}
+                  disabled={vinScanning || vinDecoding}
+                />
+                <input
+                  ref={vinLibraryInputRef}
+                  className="upload-file-input"
+                  type="file"
+                  accept="image/*"
                   onChange={(e) => {
                     void handleVinPhotoSelection(e.target.files);
                     e.currentTarget.value = "";
@@ -2431,10 +2444,18 @@ export default function CarDraftForm({
                     <button
                       type="button"
                       className="btn btn-secondary vin-camera-button"
-                      onClick={() => vinInputRef.current?.click()}
+                      onClick={() => vinCameraInputRef.current?.click()}
                       disabled={vinScanning || vinDecoding}
                     >
-                      {vinScanning ? text.vinScanning : text.vinUploadPhoto}
+                      {vinScanning ? text.vinScanning : text.vinTakePhoto}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-secondary vin-library-button"
+                      onClick={() => vinLibraryInputRef.current?.click()}
+                      disabled={vinScanning || vinDecoding}
+                    >
+                      {text.vinChoosePhoto}
                     </button>
                   </div>
                 </div>
