@@ -566,11 +566,6 @@ function normalizeVinEntry(value: string): string {
   return value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 17);
 }
 
-function extractVinFromClipboard(value: string): string {
-  const normalized = value.toUpperCase().replace(/[^A-Z0-9]/g, "");
-  return normalized.match(/[A-HJ-NPR-Z0-9]{17}/)?.[0] || normalizeVinEntry(value);
-}
-
 function normalizeDecodedVehicleFields(data: VinScanResponse) {
   return canonicalizeMakeModel({
     make: data.make,
@@ -826,10 +821,6 @@ export default function CarDraftForm({
     vinDecoding: "Decoding...",
     vinTakePhoto: "Take VIN Photo",
     vinChoosePhoto: "Choose VIN Photo",
-    vinPaste: "Paste VIN",
-    vinPasteApplied: "VIN pasted. Review it before decoding.",
-    vinPasteEmpty: "Clipboard does not contain a VIN.",
-    vinPasteUnavailable: "Clipboard paste is not available in this browser.",
     vinScanning: "Reading VIN...",
     vinReadyForReview: (vin: string) => `VIN ${vin} detected. Confirm the details before applying.`,
     vinApplied: (vin: string) => `VIN ${vin} confirmed. Details applied.`,
@@ -1228,36 +1219,6 @@ export default function CarDraftForm({
       setVinStatus(err instanceof Error ? translateApiMessage(locale, err.message) : text.vinScanFailed);
     } finally {
       setVinScanning(false);
-    }
-  }
-
-  async function handlePasteVin() {
-    setError("");
-    setSuccess("");
-    setVinStatus("");
-    setVinStatusTone("");
-    setPendingVinData(null);
-
-    if (!navigator.clipboard?.readText) {
-      setVinStatusTone("error");
-      setVinStatus(text.vinPasteUnavailable);
-      return;
-    }
-
-    try {
-      const pastedVin = extractVinFromClipboard(await navigator.clipboard.readText());
-      if (!pastedVin) {
-        setVinStatusTone("error");
-        setVinStatus(text.vinPasteEmpty);
-        return;
-      }
-
-      setManualVin(pastedVin.slice(0, 17));
-      setVinStatusTone(pastedVin.length === 17 ? "success" : "error");
-      setVinStatus(pastedVin.length === 17 ? text.vinPasteApplied : text.vinManualInvalid);
-    } catch {
-      setVinStatusTone("error");
-      setVinStatus(text.vinPasteUnavailable);
     }
   }
 
@@ -2433,14 +2394,6 @@ export default function CarDraftForm({
                     </div>
                   </div>
                   <div className="vin-secondary-actions">
-                    <button
-                      type="button"
-                      className="btn btn-secondary vin-paste-button"
-                      onClick={() => void handlePasteVin()}
-                      disabled={vinScanning || vinDecoding}
-                    >
-                      {text.vinPaste}
-                    </button>
                     <button
                       type="button"
                       className="btn btn-secondary vin-camera-button"

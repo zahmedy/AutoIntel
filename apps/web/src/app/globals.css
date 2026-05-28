@@ -3733,8 +3733,7 @@ a {
 }
 
 .vin-camera-button,
-.vin-library-button,
-.vin-paste-button {
+.vin-library-button {
   width: 100%;
   min-height: 2.8rem;
   padding-inline: 0.65rem;
@@ -4991,7 +4990,6 @@ a {
   .upload-library-button,
   .vin-camera-button,
   .vin-library-button,
-  .vin-paste-button,
   .vin-confirmation-actions .btn,
   .vin-confirmation-actions .field-action-button {
     width: 100%;
