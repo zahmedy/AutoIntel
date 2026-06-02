@@ -55,6 +55,7 @@ from app.schemas.chat import ChatMessageCreate
 from app.schemas.lead import CounterOfferCreate, OfferCreate
 from app.services.description import generate_listing_description
 from app.services.niche_scoring import BUDGET_DAILY_NICHE_ID, score_listing_for_niche
+from app.services.s3 import make_storage_key, s3_client
 from app.services.search_intent import parse_search_intent
 
 
@@ -132,6 +133,26 @@ class PreDeploymentVinTests(unittest.TestCase):
 
     def test_typed_vin_accepts_same_vin_with_correct_check_digit(self) -> None:
         self.assertEqual(_normalize_typed_vin_or_raise("2C4RC1BG3DR669714"), "2C4RC1BG3DR669714")
+
+
+class PreDeploymentS3Tests(unittest.TestCase):
+    def test_car_photo_storage_keys_use_configured_prefix(self) -> None:
+        with (
+            patch("app.services.s3.settings.S3_KEY_PREFIX", "cars-photos"),
+            patch("app.services.s3.uuid.uuid4", return_value=SimpleNamespace(hex="abc123")),
+        ):
+            storage_key = make_storage_key(42, "../front.webp")
+
+        self.assertEqual(storage_key, "cars-photos/42/abc123.webp")
+
+    def test_blank_s3_endpoint_uses_aws_default_endpoint(self) -> None:
+        with (
+            patch("app.services.s3.settings.S3_ENDPOINT_URL", ""),
+            patch("app.services.s3.boto3.client") as client,
+        ):
+            s3_client()
+
+        self.assertIsNone(client.call_args.kwargs["endpoint_url"])
 
 
 class PreDeploymentDescriptionTests(unittest.TestCase):

@@ -51,12 +51,13 @@ class Settings(BaseSettings):
     AWS_SES_SECRET_ACCESS_KEY: str | None = None
     AWS_SES_SESSION_TOKEN: str | None = None
 
-    S3_ENDPOINT_URL: str = "http://localhost:9000"
+    S3_ENDPOINT_URL: str | None = "http://localhost:9000"
     S3_ACCESS_KEY: str = "minioadmin"
     S3_SECRET_KEY: str = "minioadmin"
     S3_BUCKET: str = "autointel-media"
     S3_PRESIGN_BASE_URL: str | None = None
     S3_PUBLIC_BASE_URL: str = "http://localhost:9000/autointel-media"
+    S3_KEY_PREFIX: str = "cars-photos"
 
     OPENAI_API_KEY: str | None = None
     OPENAI_TEXT_MODEL: str = "gpt-4o-mini"

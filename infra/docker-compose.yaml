@@ -62,6 +62,7 @@ services:
       - S3_ENDPOINT_URL=http://minio:9000
       - S3_PRESIGN_BASE_URL
       - S3_PUBLIC_BASE_URL
+      - S3_KEY_PREFIX=${S3_KEY_PREFIX:-cars-photos}
     ports:
       - "8000:8000"
     extra_hosts:

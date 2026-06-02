@@ -53,6 +53,26 @@ VIN_OCR_AWS_SECRET_ACCESS_KEY=...
 
 Use `VIN_OCR_PROVIDER=auto` to try AWS Rekognition when VIN OCR AWS credentials, `AWS_ACCESS_KEY_ID`, or an AWS profile are present and fall back to Tesseract otherwise.
 
+## Car Photo Storage
+
+Car listing photos are uploaded through API-generated S3 presigned PUT URLs. Object keys default to the `cars-photos/` folder:
+
+```bash
+S3_KEY_PREFIX=cars-photos
+```
+
+For the production NicheRides bucket, point public photo URLs at the bucket host and leave custom S3 endpoints empty so boto3 uses AWS S3:
+
+```bash
+S3_BUCKET=nicherides
+S3_ENDPOINT_URL=
+S3_PRESIGN_BASE_URL=
+S3_PUBLIC_BASE_URL=https://nicherides.s3.us-east-1.amazonaws.com
+S3_KEY_PREFIX=cars-photos
+S3_ACCESS_KEY=...
+S3_SECRET_KEY=...
+```
+
 ```
 nicherides/
   apps/
