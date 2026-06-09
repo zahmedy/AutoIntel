@@ -107,9 +107,14 @@ export default function TopbarUser() {
   return (
     <>
       {isAdmin ? (
-        <Link href="/admin/reports" className="nav-link">
-          Reports
-        </Link>
+        <>
+          <Link href="/admin/listings" className="nav-link">
+            Listings
+          </Link>
+          <Link href="/admin/reports" className="nav-link">
+            Reports
+          </Link>
+        </>
       ) : null}
       <Link href="/my-cars" className="user-pill" role="button">
         {label}

@@ -224,6 +224,29 @@ class CarOut(BaseModel):
     niche_scores: dict[str, NicheScoreOut] = Field(default_factory=dict)
 
 
+class AdminCarOut(BaseModel):
+    id: int
+    status: str
+    owner_id: int
+    owner_label: Optional[str]
+    title: str
+    make: str
+    model: str
+    year: int
+    city: str
+    price: Optional[int]
+    photo_count: int
+    created_at: datetime
+    published_at: Optional[datetime]
+
+
+class AdminCarListOut(BaseModel):
+    page: int
+    page_size: int
+    total: int
+    items: list[AdminCarOut]
+
+
 class PublicSellerOut(BaseModel):
     id: Optional[int]
     name: Optional[str]
