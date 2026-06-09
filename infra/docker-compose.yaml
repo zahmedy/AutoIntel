@@ -59,7 +59,7 @@ services:
       - VIN_OCR_AWS_SECRET_ACCESS_KEY
       - VIN_OCR_AWS_SESSION_TOKEN
       - VIN_OCR_MIN_CONFIDENCE=45
-      - S3_ENDPOINT_URL=http://minio:9000
+      - S3_ENDPOINT_URL
       - S3_PRESIGN_BASE_URL
       - S3_PUBLIC_BASE_URL
       - S3_KEY_PREFIX=${S3_KEY_PREFIX:-cars-photos}
