@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { translateApiMessage } from "@/lib/locale";
@@ -35,13 +36,16 @@ async function parseApiError(res: Response): Promise<string> {
 }
 
 export default function OwnerActions({ ownerId, carId, initialStatus }: OwnerActionsProps) {
+  const router = useRouter();
   const [isOwner, setIsOwner] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [status, setStatus] = useState(initialStatus);
   const [soldAt, setSoldAt] = useState<string | null>(null);
   const [markingSold, setMarkingSold] = useState(false);
   const [celebrating, setCelebrating] = useState(false);
   const [showSoldConfirm, setShowSoldConfirm] = useState(false);
   const [soldPrice, setSoldPrice] = useState("");
+  const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -57,9 +61,8 @@ export default function OwnerActions({ ownerId, carId, initialStatus }: OwnerAct
         });
         if (!res.ok) return;
         const me = (await res.json()) as MeResponse;
-        if (me.id === ownerId) {
-          setIsOwner(true);
-        }
+        setIsOwner(me.id === ownerId);
+        setIsAdmin(me.role === "admin");
       } catch {
         // ignore auth errors
       }
@@ -68,7 +71,40 @@ export default function OwnerActions({ ownerId, carId, initialStatus }: OwnerAct
     void load();
   }, [ownerId]);
 
-  if (!isOwner) return null;
+  if (!isOwner && !isAdmin) return null;
+
+  async function deleteListing() {
+    setError("");
+    if (!API_BASE) {
+      setError("NEXT_PUBLIC_API_BASE is missing.");
+      return;
+    }
+    if (!window.confirm(`Permanently delete listing #${carId}? This removes its photos and related records and cannot be undone.`)) {
+      return;
+    }
+
+    const token = localStorage.getItem(TOKEN_KEY);
+    if (!token) {
+      setError("Login required.");
+      return;
+    }
+
+    setDeleting(true);
+    try {
+      const res = await fetch(`${API_BASE}/v1/admin/cars/${carId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        throw new Error(await parseApiError(res));
+      }
+      router.replace("/admin/listings");
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete listing.");
+      setDeleting(false);
+    }
+  }
 
   async function markSold() {
     setError("");
@@ -125,10 +161,12 @@ export default function OwnerActions({ ownerId, carId, initialStatus }: OwnerAct
 
   return (
     <div className="owner-actions spaced-top-sm">
-      <Link href={`/my-cars/${carId}/edit`} className="btn btn-primary">
-        Edit Car
-      </Link>
-      {status === "active" ? (
+      {isOwner ? (
+        <Link href={`/my-cars/${carId}/edit`} className="btn btn-primary">
+          Edit Car
+        </Link>
+      ) : null}
+      {isOwner && status === "active" ? (
         <button
           type="button"
           className={`sold-button${celebrating ? " sold-button-celebrate" : ""}`}
@@ -148,6 +186,11 @@ export default function OwnerActions({ ownerId, carId, initialStatus }: OwnerAct
             <i />
             <i />
           </span>
+        </button>
+      ) : null}
+      {isAdmin ? (
+        <button type="button" className="btn btn-danger" onClick={() => void deleteListing()} disabled={deleting}>
+          {deleting ? "Deleting..." : "Delete permanently"}
         </button>
       ) : null}
       {showSoldConfirm ? (

@@ -165,6 +165,7 @@ export default function MyCarsPage() {
     rejectFailed: "Failed to reject listing.",
     restoreSuccess: (carId: number) => `Car #${carId} restored.`,
     restoreFailed: "Failed to restore listing.",
+    restoreConfirm: (carId: number) => `Restore car #${carId} and make it active again?`,
     title: "Dashboard",
     subtitle: "",
     profileKicker: "NicheRides Account",
@@ -628,6 +629,10 @@ export default function MyCarsPage() {
     setError("");
     setSuccess("");
 
+    if (!window.confirm(text.restoreConfirm(carId))) {
+      return;
+    }
+
     if (!canLoad || !API_BASE) {
       setError(text.missingApiBase);
       return;
@@ -893,6 +898,11 @@ export default function MyCarsPage() {
               <h2 className="subheading">{text.listingsSection}</h2>
               <p className="helper-text">{text.listingsSectionHelp}</p>
             </div>
+            {isAdmin ? (
+              <Link href="/admin/listings" className="btn btn-secondary">
+                Manage all listings
+              </Link>
+            ) : null}
           </div>
           <div className="profile-listing-switch-row">
             <div className="profile-listing-switch" role="tablist" aria-label={text.listingsSection}>
