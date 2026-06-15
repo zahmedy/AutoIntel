@@ -42,17 +42,6 @@ If that service is not available, VIN photo scanning falls back to local Tessera
 brew install tesseract
 ```
 
-Cloud OCR can be enabled with AWS Rekognition:
-
-```bash
-VIN_OCR_PROVIDER=aws_rekognition
-VIN_OCR_AWS_REGION=us-east-1
-VIN_OCR_AWS_ACCESS_KEY_ID=...
-VIN_OCR_AWS_SECRET_ACCESS_KEY=...
-```
-
-Use `VIN_OCR_PROVIDER=auto` to try AWS Rekognition when VIN OCR AWS credentials, `AWS_ACCESS_KEY_ID`, or an AWS profile are present and fall back to Tesseract otherwise.
-
 ## Car Photo Storage
 
 Car listing photos are uploaded through API-generated S3 presigned PUT URLs. Object keys default to the `cars-photos/` folder:

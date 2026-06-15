@@ -57,6 +57,7 @@ from app.services.description import generate_listing_description
 from app.services.niche_scoring import BUDGET_DAILY_NICHE_ID, score_listing_for_niche
 from app.services.s3 import make_storage_key, s3_client
 from app.services.search_intent import parse_search_intent
+from app.services.vision import detect_vin_from_image
 
 
 MILES_TO_KM = 1.60934
@@ -133,6 +134,13 @@ class PreDeploymentVinTests(unittest.TestCase):
 
     def test_typed_vin_accepts_same_vin_with_correct_check_digit(self) -> None:
         self.assertEqual(_normalize_typed_vin_or_raise("2C4RC1BG3DR669714"), "2C4RC1BG3DR669714")
+
+    def test_vin_image_ocr_uses_tesseract(self) -> None:
+        with patch("app.services.vision._detect_vin_with_tesseract", return_value="2C4RC1BG3DR669714") as tesseract:
+            vin = detect_vin_from_image(b"image-bytes", "image/jpeg")
+
+        self.assertEqual(vin, "2C4RC1BG3DR669714")
+        tesseract.assert_called_once_with(b"image-bytes")
 
 
 class PreDeploymentS3Tests(unittest.TestCase):

@@ -64,12 +64,6 @@ class Settings(BaseSettings):
     PRICE_PREDICTION_API_URL: str = "http://localhost:8001/v1/price/predict"
     PRICE_PREDICTION_API_TIMEOUT_SECONDS: float = 15.0
     VIN_SCAN_DEBUG: bool = False
-    VIN_OCR_PROVIDER: str = "auto"
-    VIN_OCR_AWS_REGION: str = "us-east-1"
-    VIN_OCR_AWS_ACCESS_KEY_ID: str | None = None
-    VIN_OCR_AWS_SECRET_ACCESS_KEY: str | None = None
-    VIN_OCR_AWS_SESSION_TOKEN: str | None = None
-    VIN_OCR_MIN_CONFIDENCE: float = 45.0
     VIN_SCAN_API_URL: str = "http://localhost:8001/v1/vin/photo"
     VIN_SCAN_API_TIMEOUT_SECONDS: float = 30.0
     TESSERACT_CMD: str | None = None
