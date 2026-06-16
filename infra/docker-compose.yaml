@@ -1,5 +1,3 @@
-version: "2.4"
-
 services:
   db:
     image: postgres:16
@@ -53,9 +51,10 @@ services:
       - VIN_SCAN_DEBUG=false
       - VIN_SCAN_API_URL=${VIN_SCAN_API_URL:-http://host.docker.internal:8080/v1/vin/photo}
       - VIN_SCAN_API_TIMEOUT_SECONDS=30
-      - S3_ENDPOINT_URL
-      - S3_PRESIGN_BASE_URL
-      - S3_PUBLIC_BASE_URL
+      - S3_ACCESS_KEY
+      - S3_SECRET_KEY
+      - S3_BUCKET=${S3_BUCKET:-nicherides}
+      - S3_REGION=${S3_REGION:-us-east-1}
       - S3_KEY_PREFIX=${S3_KEY_PREFIX:-cars-photos}
     ports:
       - "8000:8000"
@@ -64,8 +63,6 @@ services:
     depends_on:
       db:
         condition: service_healthy
-      minio:
-        condition: service_started
 
   web:
     build:
@@ -84,33 +81,6 @@ services:
       api:
         condition: service_started
 
-  minio:
-    image: minio/minio:latest
-    command: server /data --console-address ":9001"
-    environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
-    ports:
-      - "9000:9000"
-      - "9001:9001"
-    volumes:
-      - miniodata:/data
-
-  createbuckets:
-    image: minio/mc:latest
-    depends_on:
-      minio:
-        condition: service_started
-    entrypoint: >
-      /bin/sh -c "
-      until /usr/bin/mc alias set local http://minio:9000 minioadmin minioadmin; do sleep 1; done;
-      /usr/bin/mc mb -p local/autointel-media || true;
-      /usr/bin/mc anonymous set download local/autointel-media || true;
-      echo '[{"AllowedOrigin":["https://nicherides.com","https://www.nicherides.com","http://localhost:3001","http://localhost:3000"],"AllowedMethod":["GET","PUT","HEAD"],"AllowedHeader":["*"],"ExposeHeader":["ETag"],"MaxAgeSeconds":3000}]' > /tmp/autointel-cors.json;
-      for i in 1 2 3 4 5; do /usr/bin/mc cors set local/autointel-media /tmp/autointel-cors.json && break || sleep 1; done;
-      exit 0;
-      "
-
   caddy:
     image: caddy:latest
     container_name: nicherides-caddy
@@ -124,10 +94,8 @@ services:
     depends_on:
       - api
       - web
-      - minio
 
 volumes:
   pgdata:
-  miniodata:
   caddy_data:
   caddy_config:

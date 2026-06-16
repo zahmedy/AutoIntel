@@ -1,6 +1,4 @@
-from urllib.parse import urlparse
-
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select, func
 
 from app.core.deps import get_current_user
@@ -8,12 +6,15 @@ from app.db.session import get_session
 from app.models.user import User
 from app.models.car import CarListing, CarMedia
 from app.schemas.media import PresignRequest, PresignResponse, MediaCompleteRequest
-from app.services.s3 import delete_object, make_storage_key, presign_put
-from app.core.config import settings
+from app.services.s3 import (
+    delete_object,
+    is_storage_key_for_car,
+    make_storage_key,
+    presign_put,
+    public_url_for_key,
+)
 
 router = APIRouter(tags=["media"])
-
-LOCAL_MEDIA_HOSTS = {"localhost", "127.0.0.1", "0.0.0.0", "minio"}
 
 def ensure_owner(car: CarListing, user: User):
     if car.owner_id != user.id:
@@ -43,52 +44,8 @@ def normalize_car_media(session: Session, car_id: int, cover_media_id: int | Non
         session.add(media)
 
 
-def _is_local_url(value: str | None) -> bool:
-    if not value:
-        return True
-    host = urlparse(value).hostname
-    return not host or host in LOCAL_MEDIA_HOSTS
-
-
-def _request_origin(request: Request) -> str | None:
-    host = (
-        request.headers.get("x-forwarded-host")
-        or request.headers.get("host")
-        or request.url.netloc
-    )
-    if not host:
-        return None
-    proto = request.headers.get("x-forwarded-proto") or request.url.scheme
-    return f"{proto}://{host.split(',')[0].strip()}"
-
-
-def _public_media_base_url(request: Request) -> str:
-    configured_base = settings.S3_PUBLIC_BASE_URL.rstrip("/")
-    if not _is_local_url(configured_base):
-        return configured_base
-
-    origin = _request_origin(request)
-    if origin and not _is_local_url(origin):
-        return f"{origin.rstrip('/')}/{settings.S3_BUCKET}"
-
-    return configured_base
-
-
-def _presign_endpoint_url(request: Request, public_media_base_url: str) -> str | None:
-    configured_endpoint = settings.S3_PRESIGN_BASE_URL
-    if configured_endpoint and not _is_local_url(configured_endpoint):
-        return configured_endpoint.rstrip("/")
-
-    bucket_suffix = f"/{settings.S3_BUCKET}"
-    if public_media_base_url.endswith(bucket_suffix):
-        return public_media_base_url[: -len(bucket_suffix)]
-
-    return configured_endpoint
-
-
 @router.post("/cars/{car_id}/media/presign", response_model=PresignResponse)
 def presign_upload(
-    request: Request,
     car_id: int,
     payload: PresignRequest,
     session: Session = Depends(get_session),
@@ -100,13 +57,8 @@ def presign_upload(
     ensure_owner(car, user)
 
     storage_key = make_storage_key(car_id, payload.filename)
-    public_media_base_url = _public_media_base_url(request)
-    upload_url = presign_put(
-        storage_key,
-        payload.content_type,
-        endpoint_url=_presign_endpoint_url(request, public_media_base_url),
-    )
-    public_url = f"{public_media_base_url}/{storage_key}"
+    upload_url = presign_put(storage_key, payload.content_type)
+    public_url = public_url_for_key(storage_key)
     return PresignResponse(upload_url=upload_url, storage_key=storage_key, public_url=public_url)
 
 @router.post("/cars/{car_id}/media/complete")
@@ -120,6 +72,8 @@ def complete_upload(
     if not car:
         raise HTTPException(status_code=404, detail="Not found")
     ensure_owner(car, user)
+    if not is_storage_key_for_car(payload.storage_key, car_id):
+        raise HTTPException(status_code=400, detail="Invalid photo storage key")
 
     # sqlmodel may return a scalar int or a row-like object depending on backend/version.
     count_result = session.exec(
@@ -133,7 +87,7 @@ def complete_upload(
     media = CarMedia(
         car_id=car_id,
         storage_key=payload.storage_key,
-        public_url=payload.public_url,
+        public_url=public_url_for_key(payload.storage_key),
         sort_order=sort_order,
         is_cover=payload.is_cover,
     )

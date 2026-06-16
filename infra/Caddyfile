@@ -1,8 +1,4 @@
 nicherides.com {
-  handle /autointel-media/* {
-    reverse_proxy minio:9000
-  }
-
   handle /v1/* {
     reverse_proxy api:8000 {
       header_up Host {host}
@@ -21,10 +17,6 @@ www.nicherides.com {
 }
 
 api.nicherides.com {
-  handle /autointel-media/* {
-    reverse_proxy minio:9000
-  }
-
   handle {
     reverse_proxy api:8000 {
       header_up Host {host}

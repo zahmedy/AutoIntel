@@ -28,6 +28,7 @@ class PresignResponse(BaseModel):
     public_url: str
 
 class MediaCompleteRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
     storage_key: str
-    public_url: str
     is_cover: bool = False

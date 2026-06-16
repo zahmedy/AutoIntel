@@ -55,7 +55,7 @@ from app.schemas.chat import ChatMessageCreate
 from app.schemas.lead import CounterOfferCreate, OfferCreate
 from app.services.description import generate_listing_description
 from app.services.niche_scoring import BUDGET_DAILY_NICHE_ID, score_listing_for_niche
-from app.services.s3 import make_storage_key, s3_client
+from app.services.s3 import is_storage_key_for_car, make_storage_key, public_url_for_key, s3_client
 from app.services.search_intent import parse_search_intent
 from app.services.vision import detect_vin_from_image
 
@@ -152,15 +152,35 @@ class PreDeploymentS3Tests(unittest.TestCase):
             storage_key = make_storage_key(42, "../front.webp")
 
         self.assertEqual(storage_key, "cars-photos/42/abc123.webp")
+        self.assertTrue(is_storage_key_for_car(storage_key, 42))
+        self.assertFalse(is_storage_key_for_car(storage_key, 4))
 
-    def test_blank_s3_endpoint_uses_aws_default_endpoint(self) -> None:
+    def test_public_photo_url_is_always_the_configured_aws_bucket(self) -> None:
         with (
-            patch("app.services.s3.settings.S3_ENDPOINT_URL", ""),
+            patch("app.services.s3.settings.S3_BUCKET", "nicherides"),
+            patch("app.services.s3.settings.S3_REGION", "us-east-1"),
+        ):
+            public_url = public_url_for_key("cars-photos/42/abc123.webp")
+
+        self.assertEqual(
+            public_url,
+            "https://nicherides.s3.us-east-1.amazonaws.com/cars-photos/42/abc123.webp",
+        )
+
+    def test_s3_client_uses_aws_endpoint_and_configured_region(self) -> None:
+        with (
+            patch("app.services.s3.settings.S3_ACCESS_KEY", None),
+            patch("app.services.s3.settings.S3_SECRET_KEY", None),
+            patch("app.services.s3.settings.S3_REGION", "us-east-1"),
             patch("app.services.s3.boto3.client") as client,
         ):
             s3_client()
 
-        self.assertIsNone(client.call_args.kwargs["endpoint_url"])
+        self.assertEqual(client.call_args.args, ("s3",))
+        self.assertNotIn("endpoint_url", client.call_args.kwargs)
+        self.assertEqual(client.call_args.kwargs["region_name"], "us-east-1")
+        self.assertNotIn("aws_access_key_id", client.call_args.kwargs)
+        self.assertNotIn("aws_secret_access_key", client.call_args.kwargs)
 
 
 class PreDeploymentDescriptionTests(unittest.TestCase):

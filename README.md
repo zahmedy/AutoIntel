@@ -50,13 +50,11 @@ Car listing photos are uploaded through API-generated S3 presigned PUT URLs. Obj
 S3_KEY_PREFIX=cars-photos
 ```
 
-For the production NicheRides bucket, point public photo URLs at the bucket host and leave custom S3 endpoints empty so boto3 uses AWS S3:
+The application uses AWS S3 directly. Configure the production NicheRides bucket and either provide credentials or attach an IAM role to the API runtime:
 
 ```bash
 S3_BUCKET=nicherides
-S3_ENDPOINT_URL=
-S3_PRESIGN_BASE_URL=
-S3_PUBLIC_BASE_URL=https://nicherides.s3.us-east-1.amazonaws.com
+S3_REGION=us-east-1
 S3_KEY_PREFIX=cars-photos
 S3_ACCESS_KEY=...
 S3_SECRET_KEY=...
