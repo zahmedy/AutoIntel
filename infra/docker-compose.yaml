@@ -80,6 +80,10 @@ services:
     depends_on:
       api:
         condition: service_started
+    deploy:
+      resources:
+        limits:
+          memory: 512M
 
   caddy:
     image: caddy:latest
